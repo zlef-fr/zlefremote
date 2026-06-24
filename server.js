@@ -66,6 +66,9 @@ const server = http.createServer((req, res) => {
     return safeStatic(res, path.join(ROOT, 'dist'), file);
   }
 
+  // self-hosted social card
+  if (p === '/og.png') return safeStatic(res, path.join(ROOT, 'public'), 'og.png');
+
   // static: /app/* , /css/* , /js/*
   if (p.startsWith('/app/')) return safeStatic(res, path.join(ROOT, 'public', 'app'), p.slice('/app/'.length));
   if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/i18n/'))

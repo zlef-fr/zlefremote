@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(60% 80% at 80% -10%, rgba(157,174,80,.16), transparent 60%),
+      radial-gradient(50% 70% at 6% 20%, rgba(176,149,179,.12), transparent 60%),
+      var(--zl-bg);
+    color: var(--zl-text); font-family: var(--zl-font); position: relative;
+    display: grid; grid-template-columns: 1.08fr .92fr; align-items: center;
+  }
+  .left { padding: 0 0 0 84px; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+  .brand .mark { color: var(--zl-accent-soft); font-size: 44px; line-height: 1; }
+  .brand .name { font-size: 34px; font-weight: 800; letter-spacing: -.01em; }
+  .brand .name b { color: var(--zl-accent-soft); }
+  .kicker { text-transform: uppercase; letter-spacing: .16em; font-size: 17px; font-weight: 700; color: var(--zl-accent-soft); margin-bottom: 20px; }
+  h1 { font-size: 78px; line-height: .98; letter-spacing: -.025em; font-weight: 800; margin-bottom: 26px; }
+  p { font-size: 25px; line-height: 1.4; color: var(--zl-text-soft); max-width: 19ch; margin-bottom: 30px; }
+  .badges { display: flex; gap: 12px; flex-wrap: wrap; }
+  .badge { font-size: 18px; color: var(--zl-text-soft); background: rgba(255,255,255,.045); border: 1px solid var(--zl-line-strong); padding: 9px 16px; border-radius: 999px; }
+
+  .art { position: relative; height: 100%; }
+  .phone { position: absolute; left: 8%; top: 50%; width: 215px; height: 440px; transform: translateY(-50%) rotate(-8deg);
+    background: linear-gradient(160deg,#16161d,#0c0c11); border: 1.5px solid var(--zl-line-strong); border-radius: 36px; padding: 16px 12px; box-shadow: 0 30px 70px rgba(0,0,0,.6); z-index: 3; }
+  .phone .scr { height: 100%; border-radius: 22px; background: #07070b; border: 1px solid var(--zl-line); display: grid; grid-template-rows: 1.6fr 1fr; overflow: hidden; }
+  .phone .pad { position: relative; background: radial-gradient(120% 120% at 50% 30%, rgba(157,174,80,.12), transparent); border-bottom: 1px solid var(--zl-line); }
+  .phone .pad::after { content:''; position:absolute; width:14px;height:14px;border-radius:50%; background:var(--zl-accent-soft); box-shadow:0 0 16px rgba(157,174,80,.5); top:40%; left:40%; }
+  .phone .keys { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; padding:12px; }
+  .phone .keys i { background: var(--zl-surface-2); border-radius: 5px; aspect-ratio: 1.4; }
+  .phone .keys i:nth-child(3n){ background: rgba(157,174,80,.18); }
+
+  .mon { position: absolute; right: 4%; top: 42%; width: 330px; transform: translateY(-50%) rotate(2deg); z-index: 1; }
+  .mon .m-scr { aspect-ratio: 16/10; border-radius: 12px; background: linear-gradient(150deg,#101017,#0a0a0f); border: 1.5px solid var(--zl-line-strong); box-shadow: inset 0 0 70px rgba(157,174,80,.08), 0 20px 50px rgba(0,0,0,.5); position: relative; overflow: hidden; }
+  .mon .m-scr::after { content:''; position:absolute; width:18px;height:18px;border-radius:50%; background:var(--zl-accent-soft); box-shadow:0 0 20px rgba(157,174,80,.5); top:44%; left:48%; }
+  .mon .stand { width: 28%; height: 18px; margin: 0 auto; background: var(--zl-surface-2); border:1px solid var(--zl-line); border-top:none; border-radius:0 0 7px 7px; }
+
+  /* wifi waves (static, brightest frame) */
+  .signal { position: absolute; left: 30%; top: 50%; z-index: 2; }
+  .wave { position: absolute; left:0; top:0; border: 2px solid var(--zl-accent-mid); border-radius: 50%; transform: translate(-50%,-50%) scale(var(--s)); clip-path: polygon(50% 50%, 102% 14%, 102% 86%); }
+  .w1{--s:.34; width:300px;height:300px; opacity:.5} .w2{--s:.62; width:300px;height:300px; opacity:.36} .w3{--s:.9; width:300px;height:300px; opacity:.22}
+  .emit { position:absolute; left:0; top:0; width:9px;height:9px;border-radius:50%; background:var(--zl-accent-soft); transform:translate(-50%,-50%); box-shadow:0 0 10px rgba(157,174,80,.4); }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand"><span class="mark">◑</span><span class="name">Zlef<b>Remote</b></span></div>
+    <div class="kicker">End-to-end encrypted · Linux · Windows · macOS</div>
+    <h1>Your phone is<br>the trackpad.</h1>
+    <p>Control your computer’s mouse &amp; keyboard from any phone.</p>
+    <div class="badges"><span class="badge">🔒 E2E encrypted</span><span class="badge">📱 No phone app</span><span class="badge">🏠 LAN or remote</span></div>
+  </div>
+  <div class="art">
+    <div class="phone"><div class="scr"><div class="pad"></div><div class="keys"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+    <div class="signal"><span class="emit"></span><span class="wave w1"></span><span class="wave w2"></span><span class="wave w3"></span></div>
+    <div class="mon"><div class="m-scr"></div><div class="stand"></div></div>
+  </div>
+</body>
+</html>
