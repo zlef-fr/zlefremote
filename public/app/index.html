@@ -12,7 +12,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=1">
+<link rel="stylesheet" href="/app/css/client.css?v=2">
 </head>
 <body>
 <!-- connection overlay -->
@@ -64,9 +64,9 @@
 
 <!-- bottom tabs -->
 <nav class="tabs">
-  <button class="tab active" data-view="pad" id="tabPad"><span class="ti">🖱️</span><span id="tlPad"></span></button>
-  <button class="tab" data-view="keys" id="tabKeys"><span class="ti">⌨️</span><span id="tlKeys"></span></button>
-  <button class="tab" data-view="media" id="tabMedia"><span class="ti">🎚️</span><span id="tlMedia"></span></button>
+  <button class="tab active" data-view="pad" id="tabPad"><span class="ti" data-ico="cursor"></span><span id="tlPad"></span></button>
+  <button class="tab" data-view="keys" id="tabKeys"><span class="ti" data-ico="keyboard"></span><span id="tlKeys"></span></button>
+  <button class="tab" data-view="media" id="tabMedia"><span class="ti" data-ico="sliders"></span><span id="tlMedia"></span></button>
 </nav>
 
 <!-- settings sheet -->
@@ -80,10 +80,11 @@
   </div>
 </div>
 
+<script src="/app/js/icons.js?v=1"></script>
 <script src="/app/js/i18n.js?v=1"></script>
 <script src="/app/js/crypto.js?v=1"></script>
 <script src="/app/js/conn.js?v=1"></script>
 <script src="/app/js/input.js?v=1"></script>
-<script src="/app/js/app.js?v=1"></script>
+<script src="/app/js/app.js?v=2"></script>
 </body>
 </html>

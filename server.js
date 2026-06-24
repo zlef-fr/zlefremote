@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { Rooms } = require('./lib/rooms');
-const { landing } = require('./lib/pages');
+const { landing, startPage } = require('./lib/pages');
 const { pickLang } = require('./lib/i18n');
 
 const PORT = parseInt(process.env.PORT || '10067', 10);
@@ -52,6 +52,12 @@ const server = http.createServer((req, res) => {
   if (p === '/' || p === '/index.html') {
     const lang = pickLang(req);
     return send(res, 200, landing(lang, distHave()), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  }
+
+  // /start — mobile funnel: preview the remote + send the agent to your desktop
+  if (p === '/start') {
+    const lang = pickLang(req);
+    return send(res, 200, startPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
   // relay client app — /r/<room> serves the phone remote SPA

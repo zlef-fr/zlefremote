@@ -40,9 +40,10 @@
 
   function showOverlay(title, text, opts = {}) {
     ov.hidden = false;
-    ovTitle.textContent = title; ovText.textContent = text || '';
+    ovTitle.textContent = title || ''; ovTitle.hidden = !title;
+    ovText.textContent = text || '';
     ovSpin.hidden = !!opts.icon; ovIcon.hidden = !opts.icon;
-    if (opts.icon) ovIcon.textContent = opts.icon;
+    if (opts.icon) ovIcon.innerHTML = ZRIcon.svg(opts.icon, 1.5);
     if (opts.btn) { ovBtn.hidden = false; ovBtn.textContent = opts.btn; ovBtn.onclick = opts.onClick; }
     else ovBtn.hidden = true;
   }
@@ -54,17 +55,17 @@
       case 'connecting': showOverlay(t('connecting'), '', {}); setStatus(t('connecting'), 'warn'); break;
       case 'linked': showOverlay(t('linking'), '', {}); setStatus(t('linking'), 'warn'); break;
       case 'reconnecting': setStatus(t('reconnecting'), 'warn'); break;
-      case 'nokey': showOverlay('🔑', t('nokey'), { icon: '🔑' }); setStatus(t('closed'), 'bad'); break;
+      case 'nokey': showOverlay('', t('nokey'), { icon: 'lock' }); setStatus(t('closed'), 'bad'); break;
     }
   });
   ZRConn.on('error', (e) => {
     const msg = e === 'no_such_room' ? t('err_room') : e === 'room_full' ? t('err_full') : t('err_connect');
-    showOverlay('⚠️', msg, { icon: '⚠️', btn: t('reconnect'), onClick: () => location.reload() });
+    showOverlay('', msg, { icon: 'warn', btn: t('reconnect'), onClick: () => location.reload() });
     setStatus(t('closed'), 'bad'); paired = false;
   });
   ZRConn.on('closed', (reason) => {
-    showOverlay('🔌', reason === 'host_left' ? t('closed_host') : t('closed'),
-      { icon: '🔌', btn: t('reconnect'), onClick: () => location.reload() });
+    showOverlay('', reason === 'host_left' ? t('closed_host') : t('closed'),
+      { icon: 'plug', btn: t('reconnect'), onClick: () => location.reload() });
     setStatus(t('closed'), 'bad'); paired = false;
   });
 
@@ -175,14 +176,14 @@
 
   // ── media ──────────────────────────────────────────────────────────────
   const MEDIA = [
-    ['🔉', t('vol_down'), 'voldown'], ['🔊', t('vol_up'), 'volup'], ['🔇', t('mute'), 'mute'],
-    ['⏯️', t('play'), 'playpause'], ['⏮️', t('prev'), 'prev'], ['⏭️', t('next'), 'next'],
+    ['voldown', t('vol_down'), 'voldown'], ['vol', t('vol_up'), 'volup'], ['mute', t('mute'), 'mute'],
+    ['play', t('play'), 'playpause'], ['prev', t('prev'), 'prev'], ['next', t('next'), 'next'],
   ];
   const mg = $('mediaGrid');
   MEDIA.forEach(([ic, label, k]) => {
     const b = document.createElement('button');
     b.className = 'mediakey';
-    b.innerHTML = `<span class="mk-ic">${ic}</span><span class="mk-l">${label}</span>`;
+    b.innerHTML = `<span class="mk-ic">${ZRIcon.svg(ic)}</span><span class="mk-l">${label}</span>`;
     b.addEventListener('click', () => { send({ t: 'media', k }); vibrate(10); });
     mg.appendChild(b);
   });

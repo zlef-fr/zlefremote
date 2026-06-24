@@ -85,12 +85,14 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
   background: var(--zl-surface-1); color: var(--zl-text);
 }
 .mediakey:active { background: var(--zl-surface-3); transform: translateY(1px); }
-.mk-ic { font-size: 30px; } .mk-l { font-size: 14px; color: var(--zl-text-soft); font-weight: 600; }
+.mk-ic { display: inline-flex; color: var(--zl-accent-soft); } .mk-ic svg { width: 30px; height: 30px; }
+.mk-l { font-size: 14px; color: var(--zl-text-soft); font-weight: 600; }
 
 /* bottom tabs */
 .tabs { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid var(--zl-line); background: var(--zl-surface-1); flex: 0 0 auto; }
 .tab { background: none; border: none; padding: 11px 0 14px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--zl-text-muted); font-size: 12px; font-weight: 600; border-top: 2px solid transparent; }
-.tab .ti { font-size: 21px; }
+.tab .ti { display: inline-flex; }
+.tab .ti svg { width: 22px; height: 22px; }
 .tab.active { color: var(--zl-accent-soft); border-top-color: var(--zl-accent-soft); background: rgba(157,174,80,.05); }
 
 /* overlay */
@@ -99,7 +101,8 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .ov-card { text-align: center; max-width: 340px; }
 .ov-card h2 { font-size: 22px; margin: 16px 0 10px; }
 .ov-text { color: var(--zl-text-soft); font-size: 15px; line-height: 1.5; margin: 0 0 18px; }
-.ov-icon { font-size: 52px; }
+.ov-icon { color: var(--zl-accent-soft); display: flex; justify-content: center; }
+.ov-icon svg { width: 48px; height: 48px; }
 .spinner { width: 52px; height: 52px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--zl-surface-3); border-top-color: var(--zl-accent-soft); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
