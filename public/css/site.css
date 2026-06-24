@@ -72,11 +72,35 @@ main, .nav, .foot { position: relative; z-index: 1; }
 .monitor-screen { aspect-ratio: 16/10; border-radius: 10px; background: linear-gradient(150deg,#101017,#0a0a0f); border: 1px solid var(--zl-line-strong); box-shadow: inset 0 0 60px rgba(157,174,80,.06), var(--zl-shadow-md); position: relative; overflow: hidden; }
 .monitor-screen::after { content:''; position:absolute; width:14px;height:14px;border-radius:50%;background:var(--zl-accent-soft);box-shadow:0 0 16px var(--zl-accent-glow); top:38%; left:46%; animation: drift 5s ease-in-out infinite; }
 .monitor-stand { width: 28%; height: 16px; margin: 0 auto; background: var(--zl-surface-2); border:1px solid var(--zl-line); border-top:none; border-radius:0 0 6px 6px; }
-.beam { position: absolute; left: 18%; bottom: 24%; width: 46%; height: 3px; z-index: 2;
-  background: linear-gradient(90deg, var(--zl-accent-soft), transparent);
-  transform: rotate(-12deg); transform-origin: left; filter: blur(.4px);
-  animation: beampulse 2.4s ease-in-out infinite; border-radius: 2px; }
-@keyframes beampulse { 0%,100%{opacity:.35} 50%{opacity:.9} }
+/* Wi-Fi signal waves radiating from the phone toward the monitor.
+   Concentric ring divs, each clipped to a right-pointing wedge → arcs; a pulse
+   of brightness travels outward (w1 → w4). */
+.signal { position: absolute; left: 24%; bottom: 50%; width: 0; height: 0; z-index: 2;
+  transform: rotate(-13deg); pointer-events: none; --base: clamp(190px, 26vw, 300px); }
+.signal .emitter {
+  position: absolute; left: 0; top: 0; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--zl-accent-soft); transform: translate(-50%, -50%);
+  box-shadow: 0 0 12px var(--zl-accent-glow); animation: emitpulse 2.6s ease-in-out infinite;
+}
+@keyframes emitpulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .8; }
+  10% { transform: translate(-50%,-50%) scale(1.4); opacity: 1; } }
+.signal .wave {
+  position: absolute; left: 0; top: 0; width: var(--base); height: var(--base);
+  border: 2.6px solid var(--zl-accent-soft); border-radius: 50%; opacity: 0;
+  transform: translate(-50%, -50%) scale(var(--s));
+  clip-path: polygon(50% 50%, 102% 4%, 102% 96%); /* right-pointing wedge */
+  animation: signalpulse 2.6s cubic-bezier(.35,.6,.3,1) infinite;
+}
+.signal .w1 { --s: .30; animation-delay: 0s; }
+.signal .w2 { --s: .54; animation-delay: .26s; }
+.signal .w3 { --s: .78; animation-delay: .52s; }
+.signal .w4 { --s: 1;   animation-delay: .78s; }
+@keyframes signalpulse {
+  0%   { opacity: 0; }
+  18%  { opacity: .9; }
+  55%  { opacity: .4; }
+  100% { opacity: 0; }
+}
 @keyframes floaty { 0%,100%{transform:translateY(0) rotate(var(--r,-7deg));} 50%{transform:translateY(-10px) rotate(var(--r,-7deg));} }
 .phone{--r:-7deg} .monitor{--r:2deg}
 
@@ -132,5 +156,6 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-  .phone, .monitor, .cursor, .bg-field, .beam, .monitor-screen::after { animation: none; }
+  .phone, .monitor, .cursor, .bg-field, .signal .wave, .monitor-screen::after { animation: none; }
+  .signal .wave { opacity: .5; }
 }
