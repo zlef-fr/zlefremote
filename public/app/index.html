@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--zlef-seo-->
+<meta name="description" content="ZlefRemote — control your computer from your phone.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#06060a">
+<link rel="icon" href="https://assets.zlef.fr/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="https://assets.zlef.fr/apple-touch-icon.png">
+<!--/zlef-seo-->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>ZlefRemote</title>
+<link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
+<link rel="stylesheet" href="/app/css/client.css?v=1">
+</head>
+<body>
+<!-- connection overlay -->
+<div id="overlay" class="overlay">
+  <div class="ov-card">
+    <div class="spinner" id="ovSpin"></div>
+    <div class="ov-icon" id="ovIcon" hidden></div>
+    <h2 id="ovTitle">Connecting…</h2>
+    <p id="ovText" class="ov-text"></p>
+    <button id="ovBtn" class="zl-btn zl-btn--primary" hidden></button>
+  </div>
+</div>
+
+<!-- top status bar -->
+<header class="topbar">
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span class="st-label" id="stLabel">…</span>
+  </div>
+  <div class="host" id="hostName"></div>
+  <button class="iconbtn" id="gear" aria-label="settings">⚙</button>
+</header>
+
+<!-- views -->
+<main class="stage">
+  <!-- TRACKPAD -->
+  <section class="view view-pad" id="viewPad">
+    <div class="pad" id="pad"><span class="pad-hint" id="padHint"></span></div>
+    <div class="mousebar">
+      <button class="mbtn" data-click="left" id="bLeft"></button>
+      <button class="mbtn mid" data-click="middle" id="bMid"></button>
+      <button class="mbtn" data-click="right" id="bRight"></button>
+      <button class="mbtn lock" id="bDrag"></button>
+    </div>
+  </section>
+
+  <!-- KEYBOARD -->
+  <section class="view view-keys" id="viewKeys" hidden>
+    <textarea id="typer" class="typer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+    <div class="modrow" id="modRow"></div>
+    <div class="speckeys" id="specKeys"></div>
+  </section>
+
+  <!-- MEDIA -->
+  <section class="view view-media" id="viewMedia" hidden>
+    <div class="mediagrid" id="mediaGrid"></div>
+  </section>
+</main>
+
+<!-- bottom tabs -->
+<nav class="tabs">
+  <button class="tab active" data-view="pad" id="tabPad"><span class="ti">🖱️</span><span id="tlPad"></span></button>
+  <button class="tab" data-view="keys" id="tabKeys"><span class="ti">⌨️</span><span id="tlKeys"></span></button>
+  <button class="tab" data-view="media" id="tabMedia"><span class="ti">🎚️</span><span id="tlMedia"></span></button>
+</nav>
+
+<!-- settings sheet -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head"><h3 id="setTitle"></h3><button class="iconbtn" id="setClose">✕</button></div>
+    <label class="setrow"><span id="lblSens"></span><input type="range" id="sens" min="0.6" max="3.2" step="0.1" value="1.6"></label>
+    <label class="setrow"><span id="lblScroll"></span><input type="range" id="scrollSp" min="0.3" max="2.5" step="0.1" value="1.0"></label>
+    <label class="setrow switch"><span id="lblNatural"></span><input type="checkbox" id="natural" checked></label>
+    <div class="sheet-foot"><span class="secure-note" id="secureNote"></span></div>
+  </div>
+</div>
+
+<script src="/app/js/i18n.js?v=1"></script>
+<script src="/app/js/crypto.js?v=1"></script>
+<script src="/app/js/conn.js?v=1"></script>
+<script src="/app/js/input.js?v=1"></script>
+<script src="/app/js/app.js?v=1"></script>
+</body>
+</html>

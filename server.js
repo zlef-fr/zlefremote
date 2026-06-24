@@ -1,0 +1,137 @@
+'use strict';
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { WebSocketServer } = require('ws');
+const { Rooms } = require('./lib/rooms');
+const { landing } = require('./lib/pages');
+const { pickLang } = require('./lib/i18n');
+
+const PORT = parseInt(process.env.PORT || '10067', 10);
+const PUBLIC_HOST = process.env.PUBLIC_HOST || 'remote.zlef.fr';
+const ROOT = __dirname;
+const MAX_FRAME = 64 * 1024; // 64 KB ceiling per relayed frame
+
+const rooms = new Rooms();
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json',
+};
+
+function distHave() {
+  try { return new Set(fs.readdirSync(path.join(ROOT, 'dist'))); }
+  catch { return new Set(); }
+}
+
+function send(res, code, body, type, extra) {
+  res.writeHead(code, Object.assign({ 'Content-Type': type || 'text/plain; charset=utf-8' }, extra || {}));
+  res.end(body);
+}
+
+function safeStatic(res, baseDir, rel) {
+  const full = path.normalize(path.join(baseDir, rel));
+  if (!full.startsWith(baseDir)) return send(res, 403, 'forbidden');
+  fs.readFile(full, (err, buf) => {
+    if (err) return send(res, 404, 'not found');
+    const ext = path.extname(full).toLowerCase();
+    send(res, 200, buf, MIME[ext] || 'application/octet-stream',
+      { 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600' });
+  });
+}
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const p = url.pathname;
+
+  if (p === '/healthz') return send(res, 200, 'ok');
+
+  // landing (SSR, i18n)
+  if (p === '/' || p === '/index.html') {
+    const lang = pickLang(req);
+    return send(res, 200, landing(lang, distHave()), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  }
+
+  // relay client app — /r/<room> serves the phone remote SPA
+  if (p === '/r' || /^\/r\/[A-Z0-9]{4,8}$/i.test(p)) {
+    return safeStatic(res, path.join(ROOT, 'public', 'app'), 'index.html');
+  }
+
+  // agent binary downloads
+  if (p.startsWith('/download/')) {
+    const file = decodeURIComponent(p.slice('/download/'.length));
+    if (!/^zlefremote-agent-[a-z0-9.\-]+$/i.test(file)) return send(res, 400, 'bad name');
+    return safeStatic(res, path.join(ROOT, 'dist'), file);
+  }
+
+  // static: /app/* , /css/* , /js/*
+  if (p.startsWith('/app/')) return safeStatic(res, path.join(ROOT, 'public', 'app'), p.slice('/app/'.length));
+  if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/i18n/'))
+    return safeStatic(res, path.join(ROOT, 'public'), p.replace(/^\//, ''));
+
+  send(res, 404, 'not found');
+});
+
+// ── WebSocket relay ─────────────────────────────────────────────────────────
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_FRAME });
+
+function clientIp(req) {
+  return (req.headers['cf-connecting-ip']
+    || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || req.socket.remoteAddress || 'unknown');
+}
+
+wss.on('connection', (ws, req) => {
+  // browser clients must come from our own origin; agents send no Origin header
+  const origin = req.headers.origin;
+  if (origin && origin !== `https://${PUBLIC_HOST}` && !/^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.)/.test(origin)) {
+    try { ws.close(1008, 'origin'); } catch {} return;
+  }
+  ws._ip = clientIp(req);
+  ws._t0 = Date.now();
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+    switch (msg.t) {
+      case 'host': {
+        if (ws._room) return;
+        const r = rooms.createRoom(ws, ws._ip);
+        if (r.error) return ws.send(JSON.stringify({ t: 'error', error: r.error }));
+        ws.send(JSON.stringify({ t: 'hosted', room: r.code }));
+        break;
+      }
+      case 'join': {
+        if (ws._room) return;
+        const r = rooms.join((msg.room || '').toUpperCase(), ws);
+        if (r.error) return ws.send(JSON.stringify({ t: 'error', error: r.error }));
+        ws.send(JSON.stringify({ t: 'joined', room: (msg.room || '').toUpperCase(), id: r.id }));
+        break;
+      }
+      case 'data': {
+        // blind relay of opaque ciphertext
+        if (ws._role === 'client') rooms.fromClient(ws, msg.payload);
+        else if (ws._role === 'host') rooms.fromHost(ws, msg.payload, msg.to);
+        break;
+      }
+      case 'ping': ws.send(JSON.stringify({ t: 'pong' })); break;
+    }
+  });
+
+  ws.on('close', () => rooms.leave(ws));
+  ws.on('error', () => rooms.leave(ws));
+});
+
+// keepalive: drop dead sockets
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws._alive === false) { try { ws.terminate(); } catch {} continue; }
+    ws._alive = false;
+    try { ws.ping(); } catch {}
+  }
+}, 30000).unref?.();
+wss.on('connection', (ws) => { ws._alive = true; ws.on('pong', () => { ws._alive = true; }); });
+
+server.listen(PORT, () => console.log(`ZlefRemote relay on :${PORT} (${PUBLIC_HOST}) — ${rooms.hostCount()} rooms`));

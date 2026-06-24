@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    container_name: zlefremote
+    restart: unless-stopped
+    # host networking: lets the relay reach Authelia (127.0.0.1:10004) for the
+    # optional-SSO replay (attribution + higher room quota for signed-in users).
+    network_mode: host
+    environment:
+      PORT: "10067"
+      PUBLIC_HOST: "remote.zlef.fr"
+    volumes:
+      # built agent binaries are served from /download
+      - ./dist:/app/dist:ro

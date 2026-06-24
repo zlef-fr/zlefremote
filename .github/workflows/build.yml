@@ -1,0 +1,59 @@
+name: build-agent
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            out: zlefremote-agent-linux-amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            out: zlefremote-agent-windows-amd64.exe
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            out: zlefremote-agent-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Linux build deps
+        if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc libc6-dev libx11-dev libxtst-dev libxkbcommon-dev xorg-dev libxext-dev
+
+      - name: Sync embedded web client (bash)
+        if: matrix.goos != 'windows'
+        run: ./sync-web.sh
+
+      - name: Sync embedded web client (windows)
+        if: matrix.goos == 'windows'
+        shell: bash
+        run: ./sync-web.sh
+
+      - name: Build (robotgo)
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p ../dist
+          go build -tags robotgo -trimpath -ldflags "-s -w" -o "../dist/${{ matrix.out }}" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: dist/${{ matrix.out }}
