@@ -25,6 +25,7 @@ func main() {
 	mode := flag.String("mode", "", "connection mode: lan | remote (prompted if empty)")
 	port := flag.Int("port", 9783, "LAN mode listen port")
 	relay := flag.String("relay", "remote.zlef.fr", "relay host for remote mode")
+	noTelemetry := flag.Bool("no-telemetry", false, "disable the anonymous startup usage ping")
 	ver := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -53,11 +54,13 @@ func main() {
 
 	switch m {
 	case "lan", "l", "1":
+		pingUsage("lan", *noTelemetry)
 		if err := runLAN(sealer, inj, keyB64, *port); err != nil {
 			fmt.Fprintln(os.Stderr, "lan mode error:", err)
 			os.Exit(1)
 		}
 	case "remote", "r", "2":
+		pingUsage("remote", *noTelemetry)
 		if err := runRelay(sealer, inj, keyB64, *relay); err != nil {
 			fmt.Fprintln(os.Stderr, "remote mode error:", err)
 			os.Exit(1)

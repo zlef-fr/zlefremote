@@ -44,7 +44,33 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent --mode remote   # pair through remote.zlef.fr (E2EE)
 ./zlefremote-agent --mode lan --port 8080
 ./zlefremote-agent --mode remote --relay remote.zlef.fr
+./zlefremote-agent --no-telemetry  # disable the anonymous usage ping (see below)
 ```
+
+## Telemetry
+
+On startup the agent sends **one** anonymous ping to `remote.zlef.fr/api/agent/ping`
+so we can see roughly how many people run it and on what platforms. The ping is
+fire-and-forget (never blocks startup) and contains only:
+
+```json
+{ "event": "start", "version": "1.0.0", "os": "linux", "arch": "amd64", "mode": "remote" }
+```
+
+No personal data, no identifier, no information about your session, your input,
+the machine you control, or who you are. It is **never** sent in LAN use beyond
+this single startup line, and the session itself is always end-to-end encrypted
+regardless.
+
+**Turn it off** — any one of these is enough:
+
+| How | What |
+|-----|------|
+| Runtime flag | `./zlefremote-agent --no-telemetry` |
+| Environment | `DO_NOT_TRACK=1` (or `ZLEFREMOTE_NO_TELEMETRY=1`) |
+| Build setting | `TELEMETRY=off ./agent/build.sh` — compiles the default to off (`-ldflags "-X main.telemetryDefault=off"`) |
+
+A build made with `TELEMETRY=off` never pings, with or without the flag.
 
 ## Build from source
 

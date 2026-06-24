@@ -13,6 +13,7 @@ const ROOT = __dirname;
 const MAX_FRAME = 64 * 1024; // 64 KB ceiling per relayed frame
 
 const rooms = new Rooms();
+let agentPings = 0;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -46,7 +47,22 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
 
-  if (p === '/healthz') return send(res, 200, 'ok');
+  if (p === '/healthz') return send(res, 200, `ok (${agentPings} agent pings)`);
+
+  // anonymous agent usage ping (version/os/arch/mode — no personal data)
+  if (p === '/api/agent/ping' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 2048) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const d = JSON.parse(body || '{}');
+        agentPings++;
+        console.log(`agent ping #${agentPings} v=${String(d.version).slice(0, 16)} os=${String(d.os).slice(0, 12)}/${String(d.arch).slice(0, 12)} mode=${String(d.mode).slice(0, 8)}`);
+      } catch {}
+      res.writeHead(204); res.end();
+    });
+    return;
+  }
 
   // landing (SSR, i18n)
   if (p === '/' || p === '/index.html') {

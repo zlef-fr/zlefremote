@@ -11,6 +11,9 @@
 # Usage:
 #   ./build.sh            # real agent for the current OS  (-tags robotgo)
 #   ./build.sh stub       # portable stub for the current OS (no CGO)
+#
+# Build setting — bake the anonymous usage ping OFF (no opt-out needed at runtime):
+#   TELEMETRY=off ./build.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 cd "$here"
@@ -21,12 +24,18 @@ os="$(go env GOOS)"; arch="$(go env GOARCH)"
 ext=""; [ "$os" = "windows" ] && ext=".exe"
 out="../dist/zlefremote-agent-${os}-${arch}${ext}"
 
+ldflags="-s -w"
+if [ "${TELEMETRY:-on}" = "off" ]; then
+  ldflags="$ldflags -X main.telemetryDefault=off"
+  echo "telemetry: compiled OFF"
+fi
+
 if [ "${1:-real}" = "stub" ]; then
   echo "building STUB → $out"
-  CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "$out" .
+  CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$out" .
 else
   echo "building REAL (robotgo) → $out"
-  CGO_ENABLED=1 go build -tags robotgo -trimpath -ldflags "-s -w" -o "$out" .
+  CGO_ENABLED=1 go build -tags robotgo -trimpath -ldflags "$ldflags" -o "$out" .
 fi
 echo "done: $out"
 ls -lh "$out"
