@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { Rooms } = require('./lib/rooms');
-const { landing, startPage } = require('./lib/pages');
+const { landing, startPage, privacyPage } = require('./lib/pages');
 const { pickLang } = require('./lib/i18n');
 
 const PORT = parseInt(process.env.PORT || '10067', 10);
@@ -58,6 +58,12 @@ const server = http.createServer((req, res) => {
   if (p === '/start') {
     const lang = pickLang(req);
     return send(res, 200, startPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  }
+
+  // /privacy — privacy policy (i18n, indexable)
+  if (p === '/privacy') {
+    const lang = pickLang(req);
+    return send(res, 200, privacyPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
   // relay client app — /r/<room> serves the phone remote SPA
