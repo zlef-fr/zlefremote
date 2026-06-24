@@ -76,29 +76,29 @@ main, .nav, .foot { position: relative; z-index: 1; }
    Concentric ring divs, each clipped to a right-pointing wedge → arcs; a pulse
    of brightness travels outward (w1 → w4). */
 .signal { position: absolute; left: 24%; bottom: 50%; width: 0; height: 0; z-index: 2;
-  transform: rotate(-13deg); pointer-events: none; --base: clamp(190px, 26vw, 300px); }
+  transform: rotate(-13deg); pointer-events: none; --base: clamp(180px, 25vw, 290px); }
 .signal .emitter {
-  position: absolute; left: 0; top: 0; width: 11px; height: 11px; border-radius: 50%;
-  background: var(--zl-accent-soft); transform: translate(-50%, -50%);
-  box-shadow: 0 0 12px var(--zl-accent-glow); animation: emitpulse 2.6s ease-in-out infinite;
+  position: absolute; left: 0; top: 0; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--zl-accent-soft); transform: translate(-50%, -50%); opacity: .7;
+  box-shadow: 0 0 7px var(--zl-accent-wash); animation: emitpulse 3.8s ease-in-out infinite;
 }
-@keyframes emitpulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .8; }
-  10% { transform: translate(-50%,-50%) scale(1.4); opacity: 1; } }
+@keyframes emitpulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .5; }
+  12% { transform: translate(-50%,-50%) scale(1.2); opacity: .8; } }
 .signal .wave {
   position: absolute; left: 0; top: 0; width: var(--base); height: var(--base);
-  border: 2.6px solid var(--zl-accent-soft); border-radius: 50%; opacity: 0;
+  border: 1.4px solid var(--zl-accent-mid); border-radius: 50%; opacity: 0;
   transform: translate(-50%, -50%) scale(var(--s));
-  clip-path: polygon(50% 50%, 102% 4%, 102% 96%); /* right-pointing wedge */
-  animation: signalpulse 2.6s cubic-bezier(.35,.6,.3,1) infinite;
+  clip-path: polygon(50% 50%, 102% 12%, 102% 88%); /* gentle right-pointing wedge */
+  animation: signalpulse 3.8s ease-in-out infinite;
 }
 .signal .w1 { --s: .30; animation-delay: 0s; }
-.signal .w2 { --s: .54; animation-delay: .26s; }
-.signal .w3 { --s: .78; animation-delay: .52s; }
-.signal .w4 { --s: 1;   animation-delay: .78s; }
+.signal .w2 { --s: .54; animation-delay: .34s; }
+.signal .w3 { --s: .78; animation-delay: .68s; }
+.signal .w4 { --s: 1;   animation-delay: 1.02s; }
 @keyframes signalpulse {
   0%   { opacity: 0; }
-  18%  { opacity: .9; }
-  55%  { opacity: .4; }
+  22%  { opacity: .32; }
+  60%  { opacity: .12; }
   100% { opacity: 0; }
 }
 @keyframes floaty { 0%,100%{transform:translateY(0) rotate(var(--r,-7deg));} 50%{transform:translateY(-10px) rotate(var(--r,-7deg));} }
@@ -157,5 +157,5 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
   .phone, .monitor, .cursor, .bg-field, .signal .wave, .monitor-screen::after { animation: none; }
-  .signal .wave { opacity: .5; }
+  .signal .wave { opacity: .18; }
 }
