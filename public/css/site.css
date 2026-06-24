@@ -144,15 +144,46 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 .foot { max-width: 1100px; margin: 0 auto; padding: 36px clamp(18px,5vw,64px); display: flex; gap: 14px; justify-content: space-between; color: var(--zl-text-muted); border-top: 1px solid var(--zl-line); font-size: 14px; }
 .foot a { color: var(--zl-accent-soft); }
 
-/* reveal on scroll */
-.reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s var(--zl-ease,ease), transform .7s var(--zl-ease,ease); }
-.reveal.in { opacity: 1; transform: none; }
+/* reveal on scroll — only hidden when JS is active (progressive enhancement) */
+.js .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s var(--zl-ease,ease), transform .7s var(--zl-ease,ease); }
+.js .reveal.in { opacity: 1; transform: none; }
 
+/* ── Tablet / small ─────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
-  .hero { grid-template-columns: 1fr; }
-  .hero-art { height: 300px; order: -1; }
+  .hero { grid-template-columns: 1fr; gap: clamp(20px,5vw,32px); padding-top: clamp(20px,5vw,40px); }
+  .hero-copy { order: 1; }
+  .hero-art { order: 2; height: clamp(220px, 56vw, 320px); }
+  .lede { max-width: 46ch; }
   .steps, .feat-grid, .mode-grid, .dl-grid { grid-template-columns: 1fr; }
-  .nav-links a:not(.zl-btn):first-child { display: none; }
+}
+
+/* ── Phone ──────────────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .nav { padding: 14px 18px; }
+  .brand { font-size: 18px; }
+  .nav-links { gap: 12px; }
+  .nav-links a:not(.zl-btn) { display: none; } /* keep only the GitHub button */
+  .hero { padding-left: 20px; padding-right: 20px; }
+  .hero-title { font-size: clamp(36px, 11vw, 50px); }
+  .lede { font-size: 17px; }
+  .hero-cta { gap: 10px; }
+  .hero-cta .zl-btn { flex: 1 1 auto; }  /* full-width, easy thumb targets */
+  .badges { gap: 8px; }
+  .badge { font-size: 12.5px; padding: 6px 11px; }
+
+  /* compact, tidy hero scene that fits a phone without clipping */
+  .hero-art { height: 240px; }
+  .phone { left: 7%; bottom: 8%; width: 100px; border-radius: 20px; padding: 9px 7px; }
+  .phone-screen { border-radius: 13px; }
+  .monitor { right: 5%; top: 16%; width: 168px; }
+  .signal { left: 31%; bottom: 47%; --base: 150px; }
+
+  section { padding-top: clamp(36px,9vw,56px); padding-bottom: clamp(36px,9vw,56px); }
+  .sect-title { font-size: clamp(26px,7vw,34px); margin-bottom: 26px; }
+  .step, .feat, .mode-card, .e2ee { padding: 20px; }
+  .dl-grid { gap: 12px; max-width: 420px; margin-left: auto; margin-right: auto; }
+  .dlcard { padding: 22px; }
+  .foot { flex-direction: column; gap: 6px; text-align: center; align-items: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
