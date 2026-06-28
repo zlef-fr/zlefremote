@@ -27,6 +27,9 @@ func main() {
 	relay := flag.String("relay", "remote.zlef.fr", "relay host for remote mode")
 	noTelemetry := flag.Bool("no-telemetry", false, "disable the anonymous startup usage ping")
 	machine := flag.Bool("machine", false, "emit machine-readable '@zr key=value' lines for front-ends (e.g. the xfce4-panel plugin)")
+	update := flag.Bool("update", false, "update the agent in place to the latest release, then exit")
+	force := flag.Bool("force", false, "with -update: reinstall even if already up to date")
+	noUpdateCheck := flag.Bool("no-update-check", false, "don't check for a newer version on startup")
 	ver := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -35,6 +38,19 @@ func main() {
 	if *ver {
 		fmt.Println("zlefremote-agent", version)
 		return
+	}
+
+	if *update {
+		if err := selfUpdate(*relay, *force); err != nil {
+			fmt.Fprintln(os.Stderr, "update failed:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// passive, best-effort "newer version available" hint (stderr only)
+	if !*noUpdateCheck && !machineMode {
+		go checkUpdateNotice(*relay)
 	}
 
 	if !machineMode {

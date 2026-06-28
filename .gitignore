@@ -4,6 +4,7 @@ node_modules/
 dist/*
 !dist/zlefremote-xfce-plugin.tar.gz
 agent/web/
+agent/agent
 *.log
 .DS_Store
 panel-plugin/*.so

@@ -7,6 +7,8 @@
  */
 #include "zlefremote.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
@@ -31,6 +33,8 @@ static const ZrStr STRINGS[] = {
   { "st_starting",  "Starting…",                         "Démarrage…" },
   { "st_waiting",   "Scan the code with your phone",      "Scannez le code avec votre téléphone" },
   { "st_paired",    "Phone connected",                   "Téléphone connecté" },
+  { "clients_1",    "1 phone connected",                 "1 téléphone connecté" },
+  { "clients_n",    "%d phones connected",               "%d téléphones connectés" },
   { "copy",         "Copy link",                         "Copier le lien" },
   { "copied",       "Copied!",                           "Copié !" },
   { "open_phone",   "Or open this link on your phone:",   "Ou ouvrez ce lien sur votre téléphone :" },
@@ -69,6 +73,7 @@ struct _ZrApp {
   char      *url;
   char      *qr_path;
   char      *agent_path;   /* resolved agent binary, or NULL */
+  GHashTable *peers;       /* connected clients: id(int) -> ip(char*)  */
 
   /* widgets */
   GtkWidget *root;
@@ -77,6 +82,7 @@ struct _ZrApp {
   GtkWidget *start_btn;
   GtkWidget *start_lbl;
   GtkWidget *status_lbl;
+  GtkWidget *clients_lbl;  /* "N connected" + IP list, shown when count > 0 */
   GtkWidget *pair_box;     /* QR + url, shown only when waiting/paired */
   GtkWidget *qr_img;
   GtkWidget *url_entry;
@@ -146,6 +152,49 @@ static void set_status(ZrApp *app, ZrStatus st) {
     app->status_cb(st, app->status_user);
 }
 
+/* ── connected-clients roster ─────────────────────────────────────────────*/
+
+/* Re-render the "N connected" label + the IP list from the peers table. The
+ * label is hidden when nobody is connected. */
+static void render_clients(ZrApp *app) {
+  if (!app->clients_lbl) return;
+  guint n = app->peers ? g_hash_table_size(app->peers) : 0;
+  if (n == 0) {
+    gtk_widget_set_visible(app->clients_lbl, FALSE);
+    return;
+  }
+
+  /* headline: "N phones connected" */
+  char *head = (n == 1)
+    ? g_strdup(zr_t("clients_1"))
+    : g_strdup_printf(zr_t("clients_n"), n);
+
+  /* one IP per line under the headline (or "unknown" when not reported) */
+  GString *body = g_string_new(NULL);
+  GHashTableIter it;
+  gpointer k, v;
+  g_hash_table_iter_init(&it, app->peers);
+  while (g_hash_table_iter_next(&it, &k, &v)) {
+    const char *ip = v && *(char*)v ? (char*)v : "unknown";
+    g_string_append_c(body, '\n');
+    g_string_append(body, ip);
+  }
+
+  char *markup = g_markup_printf_escaped(
+      "<b>%s</b><span size='small'>%s</span>", head, body->str);
+  gtk_label_set_markup(GTK_LABEL(app->clients_lbl), markup);
+  gtk_widget_set_visible(app->clients_lbl, TRUE);
+
+  g_free(markup);
+  g_string_free(body, TRUE);
+  g_free(head);
+}
+
+static void peers_clear(ZrApp *app) {
+  if (app->peers) g_hash_table_remove_all(app->peers);
+  render_clients(app);
+}
+
 /* ── stdout protocol parsing ──────────────────────────────────────────────*/
 
 static void handle_line(ZrApp *app, const char *line) {
@@ -172,9 +221,24 @@ static void handle_line(ZrApp *app, const char *line) {
       }
     } else if (strcmp(key, "status") == 0 && strcmp(val, "waiting") == 0) {
       set_status(app, ZR_WAITING);
+    } else if (strcmp(key, "peer") == 0) {
+      /* "join <id> <ip>" | "leave <id>" */
+      if (g_str_has_prefix(val, "join ")) {
+        int id = 0; char ip[256] = "";
+        if (sscanf(val + 5, "%d %255s", &id, ip) >= 1)
+          g_hash_table_insert(app->peers, GINT_TO_POINTER(id), g_strdup(ip));
+        render_clients(app);
+      } else if (g_str_has_prefix(val, "leave ")) {
+        int id = atoi(val + 6);
+        g_hash_table_remove(app->peers, GINT_TO_POINTER(id));
+        render_clients(app);
+      }
+    } else if (strcmp(key, "clients") == 0) {
+      /* authoritative count; 0 means the roster was reset (relay drop) */
+      if (atoi(val) == 0) peers_clear(app);
     } else if (strcmp(key, "event") == 0) {
       if (strcmp(val, "paired") == 0)      set_status(app, ZR_PAIRED);
-      else if (strcmp(val, "disconnect") == 0 && app->pid) set_status(app, ZR_WAITING);
+      else if (strcmp(val, "disconnect") == 0) { peers_clear(app); if (app->pid) set_status(app, ZR_WAITING); }
     }
     g_free(key);
   }
@@ -214,6 +278,10 @@ static void clear_process(ZrApp *app) {
   g_string_truncate(app->linebuf, 0);
   g_clear_pointer(&app->url, g_free);
   g_clear_pointer(&app->qr_path, g_free);
+  /* drop the roster data only — rendering is done by callers that still have
+   * live widgets (clear_process also runs from zr_app_free, after the panel has
+   * already destroyed the popup's widget tree). */
+  if (app->peers) g_hash_table_remove_all(app->peers);
 }
 
 static void on_child_exit(GPid pid, gint status, gpointer data) {
@@ -221,6 +289,7 @@ static void on_child_exit(GPid pid, gint status, gpointer data) {
   (void) status;
   if (pid != app->pid) { g_spawn_close_pid(pid); return; }
   clear_process(app);
+  render_clients(app);   /* widgets still live here — hide the roster */
   set_status(app, ZR_IDLE);
 }
 
@@ -374,6 +443,14 @@ static void build_ui(ZrApp *app) {
   gtk_label_set_justify(GTK_LABEL(app->status_lbl), GTK_JUSTIFY_CENTER);
   gtk_box_pack_start(GTK_BOX(root), app->status_lbl, FALSE, FALSE, 0);
 
+  /* connected-clients roster (count + IP list) — hidden until someone connects */
+  app->clients_lbl = gtk_label_new(NULL);
+  gtk_label_set_justify(GTK_LABEL(app->clients_lbl), GTK_JUSTIFY_CENTER);
+  gtk_widget_set_halign(app->clients_lbl, GTK_ALIGN_CENTER);
+  gtk_widget_set_no_show_all(app->clients_lbl, TRUE);
+  gtk_widget_set_visible(app->clients_lbl, FALSE);
+  gtk_box_pack_start(GTK_BOX(root), app->clients_lbl, FALSE, FALSE, 0);
+
   /* pairing block (QR + url + copy) — hidden until waiting */
   app->pair_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
   app->qr_img = gtk_image_new();
@@ -429,6 +506,7 @@ ZrApp *zr_app_new(void) {
   ZrApp *app = g_new0(ZrApp, 1);
   app->linebuf = g_string_new(NULL);
   app->status = ZR_IDLE;
+  app->peers = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
   app->agent_path = find_agent();
   build_ui(app);
   return app;
@@ -453,6 +531,7 @@ void zr_app_free(ZrApp *app) {
   if (!app) return;
   zr_app_stop(app);
   clear_process(app);
+  if (app->peers) g_hash_table_destroy(app->peers);
   g_string_free(app->linebuf, TRUE);
   g_free(app->agent_path);
   g_free(app);

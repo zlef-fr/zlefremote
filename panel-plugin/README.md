@@ -9,22 +9,45 @@ becomes a wireless trackpad + keyboard.
 
 ## Install
 
+### Debian / Ubuntu / Mint / Xubuntu — apt (recommended, auto-updates)
+
+One repo, then `apt upgrade` keeps it current:
+
+```bash
+curl -fsSL https://remote.zlef.fr/apt/zlefremote.gpg | sudo tee /usr/share/keyrings/zlefremote.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/zlefremote.gpg] https://remote.zlef.fr/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/zlefremote.list
+sudo apt update && sudo apt install zlefremote-xfce-plugin
+xfce4-panel -r
+```
+
+### Arch — PKGBUILD
+
+```bash
+makepkg -si    # uses packaging/arch/PKGBUILD (fetches the release tarball)
+```
+
+### Any distro — tarball (build from source)
+
 Grab the release tarball from <https://remote.zlef.fr> (the “Get the Xfce panel
 plugin” link under Download), or build from this directory.
 
 ```bash
-# from the tarball or a repo checkout:
 ./install.sh            # system-wide (uses sudo) — recommended
 ./install.sh --user     # per-user, into ~/.local, no root
-```
-
-Then reload the panel and add the item:
-
-```bash
+./install.sh --update   # later: fetch the latest release and reinstall
 xfce4-panel -r
 ```
 
 Right-click the panel → **Panel → Add New Items…** → search **ZlefRemote**.
+
+### Updating
+
+- **apt install** → `sudo apt update && sudo apt upgrade` (automatic).
+- **tarball install** → `./install.sh --update`.
+- **the bundled agent** can also update itself: `zlefremote-agent -update`
+  (checks `https://remote.zlef.fr/api/agent/version`, verifies the SHA-256, and
+  swaps the binary in place). apt-managed installs should use `apt upgrade`.
 
 ### Build dependencies
 
@@ -46,11 +69,19 @@ line-oriented protocol from stdout:
 @zr qr=/tmp/zlefremote-qr.png
 @zr status=waiting
 @zr event=paired
+@zr peer=join 1 203.0.113.45
+@zr clients=1
+@zr peer=leave 1
+@zr clients=0
 ```
 
-Nothing about the session is interpreted beyond the pairing URL and the QR image
-path — the agent does all the crypto and input injection, exactly as it does from
-a terminal. The plugin finds the agent via, in order: `$ZLEFREMOTE_AGENT`, your
+Nothing about the session is interpreted beyond the pairing URL, the QR image
+path, and the connected-clients roster — the agent does all the crypto and input
+injection, exactly as it does from a terminal. The popup shows a live **“N phones
+connected”** count plus each client's IP (the phone's real address — remote mode
+gets it from the relay, LAN mode from the socket), so you can always see who is
+controlling the machine. The same roster prints in the terminal when you run the
+agent directly. The plugin finds the agent via, in order: `$ZLEFREMOTE_AGENT`, your
 `$PATH`, then `~/.local/share/zlefremote/` and `/usr/local/lib/zlefremote/`.
 
 ## Files

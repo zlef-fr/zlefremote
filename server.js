@@ -2,6 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { Rooms } = require('./lib/rooms');
 const { landing, startPage, privacyPage } = require('./lib/pages');
@@ -25,6 +26,26 @@ const MIME = {
 function distHave() {
   try { return new Set(fs.readdirSync(path.join(ROOT, 'dist'))); }
   catch { return new Set(); }
+}
+
+// ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
+const AGENT_VERSION = '1.0.0';
+const AGENT_ASSETS = {
+  'linux-amd64': 'zlefremote-agent-linux-amd64',
+  'windows-amd64': 'zlefremote-agent-windows-amd64.exe',
+  'darwin-arm64': 'zlefremote-agent-darwin-arm64',
+};
+const _shaCache = new Map(); // file -> { mtimeMs, size, sha }
+function fileSha(file) {
+  try {
+    const full = path.join(ROOT, 'dist', file);
+    const st = fs.statSync(full);
+    const c = _shaCache.get(file);
+    if (c && c.mtimeMs === st.mtimeMs && c.size === st.size) return c.sha;
+    const sha = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+    _shaCache.set(file, { mtimeMs: st.mtimeMs, size: st.size, sha });
+    return sha;
+  } catch { return null; }
 }
 
 function send(res, code, body, type, extra) {
@@ -85,6 +106,30 @@ const server = http.createServer((req, res) => {
   // relay client app — /r/<room> serves the phone remote SPA
   if (p === '/r' || /^\/r\/[A-Z0-9]{4,8}$/i.test(p)) {
     return safeStatic(res, path.join(ROOT, 'public', 'app'), 'index.html');
+  }
+
+  // signed APT repository (Debian/Ubuntu). Served with no-store so Cloudflare
+  // never hands apt a stale Release/Packages (apt verifies the GPG signature).
+  if (p.startsWith('/apt/')) {
+    const baseDir = path.join(ROOT, 'dist', 'apt');
+    const full = path.normalize(path.join(baseDir, decodeURIComponent(p.slice('/apt/'.length))));
+    if (!full.startsWith(baseDir)) return send(res, 403, 'forbidden');
+    return fs.readFile(full, (err, buf) => {
+      if (err) return send(res, 404, 'not found');
+      const ext = path.extname(full).toLowerCase();
+      send(res, 200, buf, MIME[ext] || 'application/octet-stream', { 'Cache-Control': 'no-store' });
+    });
+  }
+
+  // agent release manifest — version + per-asset sha256 + download URLs
+  if (p === '/api/agent/version') {
+    const assets = {};
+    for (const [k, f] of Object.entries(AGENT_ASSETS)) {
+      const sha = fileSha(f);
+      if (sha) assets[k] = { file: f, sha256: sha, url: `https://${PUBLIC_HOST}/download/${f}` };
+    }
+    return send(res, 200, JSON.stringify({ version: AGENT_VERSION, assets }),
+      'application/json; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
   // agent binary downloads

@@ -4,6 +4,7 @@
 #   ./install.sh            # system-wide install (uses sudo) — recommended
 #   ./install.sh --user     # per-user install into ~/.local (no root)
 #   ./install.sh --uninstall [--user]
+#   ./install.sh --update [--user]   # fetch the latest release and reinstall
 #
 # After installing: right-click the Xfce panel → "Panel" → "Add New Items…" →
 # search "ZlefRemote".
@@ -18,10 +19,22 @@ for a in "$@"; do
     --user)      MODE=user ;;
     --system)    MODE=system ;;
     --uninstall) ACTION=uninstall ;;
+    --update)    ACTION=update ;;
     -h|--help)   sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
+
+# --update: fetch the latest release tarball and re-run its installer.
+# (Debian/Ubuntu users on the apt repo just use `apt upgrade` instead.)
+if [ "$ACTION" = update ]; then
+  url="https://remote.zlef.fr/download/zlefremote-xfce-plugin.tar.gz"
+  echo "Fetching latest from $url …"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$url" -o "$tmp/p.tgz" || { echo "download failed" >&2; exit 1; }
+  tar xzf "$tmp/p.tgz" -C "$tmp"
+  exec sh "$tmp/zlefremote-xfce-plugin/install.sh" "--$MODE"
+fi
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1"; return 1; }; }
 

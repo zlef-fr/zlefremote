@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -23,6 +24,7 @@ type frame struct {
 	From    int    `json:"from,omitempty"`
 	To      int    `json:"to,omitempty"`
 	Event   string `json:"event,omitempty"`
+	IP      string `json:"ip,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -36,6 +38,16 @@ func lanIP() string {
 		}
 	}
 	return "127.0.0.1"
+}
+
+// peerIP extracts the client IP from an inbound LAN request, stripping the
+// ephemeral port. On a LAN this is the phone's local address.
+func peerIP(r *http.Request) string {
+	addr := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
@@ -54,6 +66,9 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 		}
 		http.NotFound(w, r)
 	})
+	roster := NewRoster()
+	var idMu sync.Mutex
+	var nextID int
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		// Not TLS verification: this is the WS Origin check. On a LAN the host
 		// is reached by IP/hostname from varied origins; the real access gate is
@@ -64,6 +79,12 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 			return
 		}
 		defer c.CloseNow()
+		idMu.Lock()
+		nextID++
+		id := nextID
+		idMu.Unlock()
+		roster.Add(id, peerIP(r))
+		defer roster.Remove(id)
 		se := NewSession(sealer, inj)
 		ctx := context.Background()
 		for {

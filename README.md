@@ -45,7 +45,14 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent --mode lan --port 8080
 ./zlefremote-agent --mode remote --relay remote.zlef.fr
 ./zlefremote-agent --no-telemetry  # disable the anonymous usage ping (see below)
+./zlefremote-agent -update         # update the binary in place to the latest release
+./zlefremote-agent -update -force  # reinstall even if already current
 ```
+
+The agent checks `https://remote.zlef.fr/api/agent/version` for a newer build on
+startup (a one-line stderr hint; disable with `-no-update-check`). `-update`
+downloads the build for your OS/arch, verifies its SHA-256, and atomically
+replaces the running binary. Installed via apt? Use `apt upgrade` instead.
 
 ## Xfce panel plugin
 
@@ -54,10 +61,22 @@ the panel — no terminal. See [`panel-plugin/`](panel-plugin/):
 
 ![Xfce panel plugin demo](media/zlefremote-xfce-demo.gif)
 
+Debian/Ubuntu/Mint/Xubuntu — apt (auto-updates via `apt upgrade`):
+
+```bash
+curl -fsSL https://remote.zlef.fr/apt/zlefremote.gpg | sudo tee /usr/share/keyrings/zlefremote.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/zlefremote.gpg] https://remote.zlef.fr/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/zlefremote.list
+sudo apt update && sudo apt install zlefremote-xfce-plugin && xfce4-panel -r
+```
+
+Other distros (Arch `PKGBUILD` in `packaging/arch/`, or the source tarball):
+
 ```bash
 cd panel-plugin
 ./install.sh            # system-wide (sudo) — recommended
 ./install.sh --user     # per-user, no root
+./install.sh --update   # later: fetch latest & reinstall
 xfce4-panel -r          # then: panel → Add New Items… → "ZlefRemote"
 ```
 

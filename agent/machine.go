@@ -20,6 +20,9 @@ import (
 //	status=waiting        agent is up and waiting for a phone
 //	event=paired          a phone completed the handshake
 //	event=disconnect      the relay dropped (remote mode auto-reconnects)
+//	peer=join <id> <ip>   a phone connected (ip may be empty = unknown)
+//	peer=leave <id>       a phone disconnected
+//	clients=<n>           current connected-client count (after each change)
 var machineMode bool
 
 // emit writes one machine line if machine mode is on. It flushes immediately

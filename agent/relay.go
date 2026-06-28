@@ -39,6 +39,8 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 	}
 
 	sessions := map[int]*Session{}
+	roster := NewRoster()
+	defer roster.Reset()
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -68,8 +70,11 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 				fmt.Printf("  Waiting for your phone…  ·  press Ctrl-C to stop\n\n")
 			}
 		case "peer":
-			if f.Event == "leave" {
+			if f.Event == "join" {
+				roster.Add(f.ID, f.IP)
+			} else if f.Event == "leave" {
 				delete(sessions, f.ID)
+				roster.Remove(f.ID)
 			}
 		case "data":
 			se := sessions[f.From]
