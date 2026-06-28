@@ -1,5 +1,8 @@
 node_modules/
-dist/
+# ignore built dist contents, but DO track the Xfce plugin tarball — it has no
+# CI build step, so it ships from the repo (agent binaries are CI-built, ignored)
+dist/*
+!dist/zlefremote-xfce-plugin.tar.gz
 agent/web/
 *.log
 .DS_Store
