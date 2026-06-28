@@ -108,17 +108,12 @@ const server = http.createServer((req, res) => {
     return safeStatic(res, path.join(ROOT, 'public', 'app'), 'index.html');
   }
 
-  // signed APT repository (Debian/Ubuntu). Served with no-store so Cloudflare
-  // never hands apt a stale Release/Packages (apt verifies the GPG signature).
-  if (p.startsWith('/apt/')) {
-    const baseDir = path.join(ROOT, 'dist', 'apt');
-    const full = path.normalize(path.join(baseDir, decodeURIComponent(p.slice('/apt/'.length))));
-    if (full !== baseDir && !full.startsWith(baseDir + path.sep)) return send(res, 403, 'forbidden');
-    return fs.readFile(full, (err, buf) => {
-      if (err) return send(res, 404, 'not found');
-      const ext = path.extname(full).toLowerCase();
-      send(res, 200, buf, MIME[ext] || 'application/octet-stream', { 'Cache-Control': 'no-store' });
-    });
+  // The apt repo is now zlef-wide at apt.zlef.fr. Permanently redirect the old
+  // remote.zlef.fr/apt/* paths there so existing sources.list entries keep
+  // working (apt follows redirects; the signing key is the same).
+  if (p === '/apt' || p.startsWith('/apt/')) {
+    res.writeHead(301, { Location: 'https://apt.zlef.fr' + p.slice('/apt'.length) });
+    return res.end();
   }
 
   // agent release manifest — version + per-asset sha256 + download URLs

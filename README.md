@@ -64,9 +64,9 @@ the panel — no terminal. See [`panel-plugin/`](panel-plugin/):
 Debian/Ubuntu/Mint/Xubuntu — apt (auto-updates via `apt upgrade`):
 
 ```bash
-curl -fsSL https://remote.zlef.fr/apt/zlefremote.gpg | sudo tee /usr/share/keyrings/zlefremote.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/zlefremote.gpg] https://remote.zlef.fr/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/zlefremote.list
+curl -fsSL https://apt.zlef.fr/zlef.gpg | sudo tee /usr/share/keyrings/zlef.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/zlef.gpg] https://apt.zlef.fr stable main" \
+  | sudo tee /etc/apt/sources.list.d/zlef.list
 sudo apt update && sudo apt install zlefremote-xfce-plugin && xfce4-panel -r
 ```
 
