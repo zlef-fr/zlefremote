@@ -52,6 +52,8 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 On an Xfce desktop you can start a session and show the pairing QR straight from
 the panel — no terminal. See [`panel-plugin/`](panel-plugin/):
 
+![Xfce panel plugin demo](media/zlefremote-xfce-demo.gif)
+
 ```bash
 cd panel-plugin
 ./install.sh            # system-wide (sudo) — recommended

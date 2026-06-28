@@ -15,7 +15,10 @@ typedef struct {
   GtkWidget *icon;     /* its image */
   GtkWidget *popup;    /* the control window */
   ZrApp     *app;
+  guint      reposition_src;  /* pending deferred reposition, 0 if none */
 } PluginCtx;
+
+static gboolean reposition_idle(gpointer data);
 
 /* ── panel icon ───────────────────────────────────────────────────────────*/
 
@@ -41,6 +44,11 @@ static void on_status(ZrStatus st, gpointer data) {
   gtk_widget_set_tooltip_text(ctx->button, tip);
   if (st == ZR_IDLE) gtk_style_context_remove_class(sc, "zr-active");
   else               gtk_style_context_add_class(sc, "zr-active");
+
+  /* the popup grows when the QR/pairing block appears (and shrinks on stop) —
+   * reposition once the new size is applied so it never spills off-screen */
+  if (gtk_widget_get_visible(ctx->popup) && ctx->reposition_src == 0)
+    ctx->reposition_src = g_timeout_add(10, reposition_idle, ctx);
 }
 
 /* ── popup show / hide ────────────────────────────────────────────────────*/
@@ -52,12 +60,30 @@ static void popup_hide(PluginCtx *ctx) {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ctx->button), FALSE);
 }
 
-static void popup_show(PluginCtx *ctx) {
+/* (Re)place the popup against the panel button. The panel keeps it within the
+ * monitor and flips it to the other side of the panel when it would overflow. */
+static void popup_position(PluginCtx *ctx) {
   gint x = 0, y = 0;
-  gtk_widget_show(ctx->popup);
-  xfce_panel_plugin_block_autohide(ctx->plugin, TRUE);
+  if (!gtk_widget_get_visible(ctx->popup)) return;
   xfce_panel_plugin_position_widget(ctx->plugin, ctx->popup, ctx->button, &x, &y);
   gtk_window_move(GTK_WINDOW(ctx->popup), x, y);
+}
+
+/* Run after the popup's content has grown/shrunk (e.g. the QR appears on Start):
+ * GTK applies the new natural size on the next main-loop pass, so we reposition
+ * one idle tick later — otherwise the larger window keeps the old top-left and
+ * spills off-screen until it is reopened. */
+static gboolean reposition_idle(gpointer data) {
+  PluginCtx *ctx = data;
+  ctx->reposition_src = 0;
+  popup_position(ctx);
+  return G_SOURCE_REMOVE;
+}
+
+static void popup_show(PluginCtx *ctx) {
+  gtk_widget_show(ctx->popup);
+  xfce_panel_plugin_block_autohide(ctx->plugin, TRUE);
+  popup_position(ctx);
   gtk_window_present(GTK_WINDOW(ctx->popup));
 }
 
@@ -90,6 +116,7 @@ static gboolean on_size_changed(XfcePanelPlugin *plugin, gint size, PluginCtx *c
 
 static void on_free(XfcePanelPlugin *plugin, PluginCtx *ctx) {
   (void) plugin;
+  if (ctx->reposition_src) g_source_remove(ctx->reposition_src);
   if (ctx->popup) gtk_widget_destroy(ctx->popup);
   zr_app_free(ctx->app);
   g_free(ctx);

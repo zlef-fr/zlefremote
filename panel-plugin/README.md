@@ -5,7 +5,7 @@ straight from your Xfce panel — no terminal. Click the panel button, pick **Lo
 network** or **Remote**, hit **Start**, and scan the QR with your phone. The phone
 becomes a wireless trackpad + keyboard.
 
-![idle](../public/og.png)
+![ZlefRemote Xfce panel plugin — start a session and scan from the panel](../media/zlefremote-xfce-demo.gif)
 
 ## Install
 
