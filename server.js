@@ -90,7 +90,9 @@ const server = http.createServer((req, res) => {
   // agent binary downloads
   if (p.startsWith('/download/')) {
     const file = decodeURIComponent(p.slice('/download/'.length));
-    if (!/^zlefremote-agent-[a-z0-9.\-]+$/i.test(file)) return send(res, 400, 'bad name');
+    const ok = /^zlefremote-agent-[a-z0-9.\-]+$/i.test(file)
+      || /^zlefremote-xfce-plugin(?:-[a-z0-9.\-]+)?\.tar\.gz$/i.test(file);
+    if (!ok) return send(res, 400, 'bad name');
     return safeStatic(res, path.join(ROOT, 'dist'), file);
   }
 

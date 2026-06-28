@@ -139,6 +139,10 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 .dlget { margin-top: 8px; font-size: 14px; font-weight: 700; color: var(--zl-accent-soft); }
 .dlget.muted { color: var(--zl-text-muted); }
 .dl-note { text-align: center; color: var(--zl-text-muted); font-size: 14px; margin-top: 22px; }
+.dl-xfce { text-align: center; color: var(--zl-text-soft); font-size: 14px; margin-top: 10px; }
+.dl-xfce a { color: var(--zl-accent-soft); text-decoration: none; white-space: nowrap; font-weight: 600; transition: color .18s ease; }
+.dl-xfce a:hover { color: var(--zl-accent-bright); }
+.dl-xfce a svg { width: 14px; height: 14px; vertical-align: -2px; }
 
 /* footer */
 .foot { max-width: 1100px; margin: 0 auto; padding: 36px clamp(18px,5vw,64px); display: flex; gap: 14px; justify-content: space-between; color: var(--zl-text-muted); border-top: 1px solid var(--zl-line); font-size: 14px; }

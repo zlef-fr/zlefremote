@@ -1,0 +1,11 @@
+[Xfce Panel]
+Type=X-XFCE-PanelPlugin
+Encoding=UTF-8
+Name=ZlefRemote
+Name[fr]=ZlefRemote
+Comment=Turn your phone into a wireless trackpad & keyboard
+Comment[fr]=Transformez votre téléphone en trackpad et clavier sans fil
+Icon=zlefremote
+X-XFCE-Module=zlefremote
+X-XFCE-Internal=TRUE
+X-XFCE-API=2.0

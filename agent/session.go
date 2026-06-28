@@ -67,6 +67,7 @@ func (se *Session) Handle(frame string) (reply string) {
 		})
 		out, _ := se.sealer.Seal(b)
 		log.Printf("paired with a phone")
+		emit("event", "paired")
 		return out
 	case "mv":
 		se.inj.MoveRel(c.DX, c.DY)

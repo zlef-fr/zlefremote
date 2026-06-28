@@ -14,7 +14,10 @@ import (
 func runRelay(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 	for {
 		err := relayOnce(sealer, inj, keyB64, relayHost)
-		fmt.Printf("\n  relay disconnected (%v) — reconnecting in 3s…\n", err)
+		emit("event", "disconnect")
+		if !machineMode {
+			fmt.Printf("\n  relay disconnected (%v) — reconnecting in 3s…\n", err)
+		}
 		time.Sleep(3 * time.Second)
 	}
 }
@@ -48,11 +51,22 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 		switch f.T {
 		case "hosted":
 			url := fmt.Sprintf("https://%s/r/%s#k=%s", relayHost, f.Room, keyB64)
-			fmt.Printf("\n  \033[1mRemote mode\033[0m — works from anywhere, end-to-end encrypted.\n")
-			fmt.Printf("  Room code: \033[1;32m%s\033[0m\n\n", f.Room)
-			printQR(url)
-			fmt.Printf("\n  Or open this on your phone:\n  \033[36m%s\033[0m\n\n", url)
-			fmt.Printf("  Waiting for your phone…  ·  press Ctrl-C to stop\n\n")
+			emit("mode", "remote")
+			emit("room", f.Room)
+			if !machineMode {
+				fmt.Printf("\n  \033[1mRemote mode\033[0m — works from anywhere, end-to-end encrypted.\n")
+				fmt.Printf("  Room code: \033[1;32m%s\033[0m\n\n", f.Room)
+			}
+			qrPath := printQR(url)
+			emit("url", url)
+			if qrPath != "" {
+				emit("qr", qrPath)
+			}
+			emit("status", "waiting")
+			if !machineMode {
+				fmt.Printf("\n  Or open this on your phone:\n  \033[36m%s\033[0m\n\n", url)
+				fmt.Printf("  Waiting for your phone…  ·  press Ctrl-C to stop\n\n")
+			}
 		case "peer":
 			if f.Event == "leave" {
 				delete(sessions, f.ID)

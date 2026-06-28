@@ -26,19 +26,27 @@ func main() {
 	port := flag.Int("port", 9783, "LAN mode listen port")
 	relay := flag.String("relay", "remote.zlef.fr", "relay host for remote mode")
 	noTelemetry := flag.Bool("no-telemetry", false, "disable the anonymous startup usage ping")
+	machine := flag.Bool("machine", false, "emit machine-readable '@zr key=value' lines for front-ends (e.g. the xfce4-panel plugin)")
 	ver := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	machineMode = *machine
 
 	if *ver {
 		fmt.Println("zlefremote-agent", version)
 		return
 	}
 
-	fmt.Print(banner)
+	if !machineMode {
+		fmt.Print(banner)
+	}
 
 	inj := newInjector()
 	name, goos := inj.HostInfo()
-	fmt.Printf("  host: %s (%s)\n", name, goos)
+	emit("host", name)
+	if !machineMode {
+		fmt.Printf("  host: %s (%s)\n", name, goos)
+	}
 
 	key, keyB64 := NewKey()
 	sealer, err := NewSealer(key)

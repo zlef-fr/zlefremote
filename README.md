@@ -47,6 +47,23 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent --no-telemetry  # disable the anonymous usage ping (see below)
 ```
 
+## Xfce panel plugin
+
+On an Xfce desktop you can start a session and show the pairing QR straight from
+the panel — no terminal. See [`panel-plugin/`](panel-plugin/):
+
+```bash
+cd panel-plugin
+./install.sh            # system-wide (sudo) — recommended
+./install.sh --user     # per-user, no root
+xfce4-panel -r          # then: panel → Add New Items… → "ZlefRemote"
+```
+
+A prebuilt tarball (sources + bundled Linux agent + installer) is linked from the
+Download section on <https://remote.zlef.fr>. The plugin drives the same agent
+binary in machine mode (`zlefremote-agent -machine`), so all crypto and input
+injection happen exactly as in terminal use.
+
 ## Telemetry
 
 On startup the agent sends **one** anonymous ping to `remote.zlef.fr/api/agent/ping`

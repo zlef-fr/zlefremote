@@ -84,10 +84,20 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 
 	ip := lanIP()
 	url := fmt.Sprintf("http://%s:%d/#k=%s", ip, port, keyB64)
-	fmt.Printf("\n  \033[1mLAN mode\033[0m — make sure your phone is on the same Wi-Fi.\n\n")
-	printQR(url)
-	fmt.Printf("\n  Or open this on your phone:\n  \033[36m%s\033[0m\n\n", url)
-	fmt.Printf("  Listening on %s:%d  ·  press Ctrl-C to stop\n\n", ip, port)
+	emit("mode", "lan")
+	if !machineMode {
+		fmt.Printf("\n  \033[1mLAN mode\033[0m — make sure your phone is on the same Wi-Fi.\n\n")
+	}
+	qrPath := printQR(url)
+	emit("url", url)
+	if qrPath != "" {
+		emit("qr", qrPath)
+	}
+	emit("status", "waiting")
+	if !machineMode {
+		fmt.Printf("\n  Or open this on your phone:\n  \033[36m%s\033[0m\n\n", url)
+		fmt.Printf("  Listening on %s:%d  ·  press Ctrl-C to stop\n\n", ip, port)
+	}
 
 	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	log.SetFlags(log.Ltime)

@@ -3,3 +3,5 @@ dist/
 agent/web/
 *.log
 .DS_Store
+panel-plugin/*.so
+panel-plugin/zr-standalone
