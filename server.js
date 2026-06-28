@@ -55,7 +55,7 @@ function send(res, code, body, type, extra) {
 
 function safeStatic(res, baseDir, rel) {
   const full = path.normalize(path.join(baseDir, rel));
-  if (!full.startsWith(baseDir)) return send(res, 403, 'forbidden');
+  if (full !== baseDir && !full.startsWith(baseDir + path.sep)) return send(res, 403, 'forbidden');
   fs.readFile(full, (err, buf) => {
     if (err) return send(res, 404, 'not found');
     const ext = path.extname(full).toLowerCase();
@@ -113,7 +113,7 @@ const server = http.createServer((req, res) => {
   if (p.startsWith('/apt/')) {
     const baseDir = path.join(ROOT, 'dist', 'apt');
     const full = path.normalize(path.join(baseDir, decodeURIComponent(p.slice('/apt/'.length))));
-    if (!full.startsWith(baseDir)) return send(res, 403, 'forbidden');
+    if (full !== baseDir && !full.startsWith(baseDir + path.sep)) return send(res, 403, 'forbidden');
     return fs.readFile(full, (err, buf) => {
       if (err) return send(res, 404, 'not found');
       const ext = path.extname(full).toLowerCase();
