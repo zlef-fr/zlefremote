@@ -281,3 +281,18 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 .priv-sec h2::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
   background: var(--zl-accent-soft); margin-right: 11px; vertical-align: middle; }
 .priv-sec p { color: var(--zl-text-soft); line-height: 1.68; font-size: 16px; margin: 0 0 12px; max-width: 68ch; }
+
+/* "Open the remote" — PWA entry from the mobile /start funnel */
+.openapp { display: flex; align-items: center; gap: 14px; margin-top: 16px;
+  background: var(--zl-accent-wash); border: 1px solid rgba(157,174,80,.35);
+  border-radius: var(--zl-radius-lg); padding: 16px 18px; text-decoration: none;
+  transition: background .15s, transform .06s, border-color .15s; }
+.openapp:hover { background: rgba(157,174,80,.16); border-color: var(--zl-line-focus); }
+.openapp:active { transform: translateY(1px); }
+.openapp-ic { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  color: var(--zl-accent-soft); background: var(--zl-surface-2); border: 1px solid var(--zl-line); }
+.openapp-ic .ico { width: 22px; height: 22px; }
+.openapp-txt { display: flex; flex-direction: column; gap: 3px; }
+.openapp-t { font-weight: 700; color: var(--zl-text); font-size: 16px; }
+.openapp-t .ico { width: 15px; height: 15px; vertical-align: -2px; color: var(--zl-accent-soft); }
+.openapp-s { font-size: 13.5px; color: var(--zl-text-muted); line-height: 1.45; }

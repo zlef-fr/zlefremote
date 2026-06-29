@@ -29,7 +29,7 @@ function distHave() {
 }
 
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
-const AGENT_VERSION = '1.0.0';
+const AGENT_VERSION = '1.1.0';
 const AGENT_ASSETS = {
   'linux-amd64': 'zlefremote-agent-linux-amd64',
   'windows-amd64': 'zlefremote-agent-windows-amd64.exe',
@@ -103,8 +103,9 @@ const server = http.createServer((req, res) => {
     return send(res, 200, privacyPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
-  // relay client app — /r/<room> serves the phone remote SPA
-  if (p === '/r' || /^\/r\/[A-Z0-9]{4,8}$/i.test(p)) {
+  // relay client app — /r (home/device picker), /r/ and /r/<room> serve the
+  // phone remote SPA (the PWA start_url is /r/, and saved-device nav lands here)
+  if (p === '/r' || p === '/r/' || /^\/r\/[A-Z0-9]{4,8}$/i.test(p)) {
     return safeStatic(res, path.join(ROOT, 'public', 'app'), 'index.html');
   }
 
@@ -134,6 +135,25 @@ const server = http.createServer((req, res) => {
       || /^zlefremote-xfce-plugin(?:-[a-z0-9.\-]+)?\.tar\.gz$/i.test(file);
     if (!ok) return send(res, 400, 'bad name');
     return safeStatic(res, path.join(ROOT, 'dist'), file);
+  }
+
+  // PWA service worker — served from root so its scope is the whole origin
+  // (it only intercepts the remote app's own routes; everything else passes
+  // through). no-cache so a new worker is picked up immediately.
+  if (p === '/sw.js') {
+    return fs.readFile(path.join(ROOT, 'public', 'app', 'sw.js'), (err, buf) => {
+      if (err) return send(res, 404, 'not found');
+      send(res, 200, buf, 'text/javascript; charset=utf-8',
+        { 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' });
+    });
+  }
+
+  // PWA manifest for the installable remote app
+  if (p === '/app.webmanifest') {
+    return fs.readFile(path.join(ROOT, 'public', 'app', 'app.webmanifest'), (err, buf) => {
+      if (err) return send(res, 404, 'not found');
+      send(res, 200, buf, 'application/manifest+json; charset=utf-8', { 'Cache-Control': 'no-cache' });
+    });
   }
 
   // self-hosted social card
@@ -171,7 +191,9 @@ wss.on('connection', (ws, req) => {
     switch (msg.t) {
       case 'host': {
         if (ws._room) return;
-        const r = rooms.createRoom(ws, ws._ip);
+        // optional desired code: persistent agents derive a stable room from
+        // their key so saved phones reconnect to the same address.
+        const r = rooms.createRoom(ws, ws._ip, msg.room);
         if (r.error) return ws.send(JSON.stringify({ t: 'error', error: r.error }));
         ws.send(JSON.stringify({ t: 'hosted', room: r.code }));
         break;

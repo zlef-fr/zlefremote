@@ -1,0 +1,218 @@
+// Home screen — the saved/new device picker. This is the PWA's entry point:
+// a list of remembered computers you reconnect to in one tap, plus an "add a
+// device" flow (scan the agent QR, or paste its pairing link).
+//
+// A device is reconnectable only when its agent runs with --remember: the agent
+// then derives a STABLE relay room from its persisted key, and the pairing URL
+// carries &p=1. We store just the key (+ os/name) and re-derive the room on each
+// reconnect, so a saved phone always finds the computer at the same address.
+const ZRHome = (() => {
+  const t = ZRI18n.t;
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'zr_devices';
+
+  // ── store ────────────────────────────────────────────────────────────────
+  function load() {
+    try { const a = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(a) ? a : []; }
+    catch { return []; }
+  }
+  function save(list) { localStorage.setItem(KEY, JSON.stringify(list)); }
+  function list() { return load().sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0)); }
+  function devId(d) { return d.persistent ? 'p:' + d.room : 'e:' + d.room + ':' + (d.key || '').slice(0, 8); }
+
+  function upsert(dev) {
+    const all = load();
+    const id = devId(dev);
+    const i = all.findIndex((d) => devId(d) === id);
+    if (i >= 0) all[i] = Object.assign(all[i], dev, { lastUsed: Date.now() });
+    else all.push(Object.assign({ addedAt: Date.now(), lastUsed: Date.now() }, dev));
+    save(all);
+    return id;
+  }
+  function removeById(id) { save(load().filter((d) => devId(d) !== id)); }
+  function renameById(id, name) {
+    const all = load(); const d = all.find((x) => devId(x) === id);
+    if (d) { d.name = name; save(all); }
+  }
+  function touchById(id) {
+    const all = load(); const d = all.find((x) => devId(x) === id);
+    if (d) { d.lastUsed = Date.now(); save(all); }
+  }
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+  const OS = { linux: '🐧', windows: '🪟', win: '🪟', darwin: '🍎', mac: '🍎' };
+  function osGlyph(os) { return OS[(os || '').toLowerCase()] || '🖥'; }
+  function timeAgo(ms) {
+    if (!ms) return '';
+    const s = Math.floor((Date.now() - ms) / 1000);
+    if (s < 45) return t('just_now');
+    const m = Math.floor(s / 60); if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60); if (h < 24) return h + ' h';
+    const d = Math.floor(h / 24); return d + (ZRI18n.lang === 'fr' ? ' j' : ' d');
+  }
+
+  // build a device URL and navigate (re-derives the stable room from the key)
+  async function connectTo(dev) {
+    let room = dev.room;
+    if (dev.persistent && dev.key) {
+      try { room = await ZRCrypto.deriveRoom(dev.key); } catch {}
+    }
+    touchById(devId(dev));
+    location.href = `/r/${room}#k=${dev.key}` + (dev.persistent ? '&p=1' : '');
+  }
+
+  // ── render ─────────────────────────────────────────────────────────────────
+  let menuOpenId = null;
+  function render() {
+    $('homeTitle').textContent = t('home_title');
+    $('homeSub').textContent = t('home_sub');
+    $('addLabel').textContent = t('add_device');
+
+    const wrap = $('devList');
+    const devs = list();
+    wrap.innerHTML = '';
+
+    if (!devs.length) {
+      const e = document.createElement('div');
+      e.className = 'dev-empty';
+      e.innerHTML = `<div class="empty-ic">${ZRIcon.svg('cursor', 1.4)}</div>
+        <h2>${t('empty_title')}</h2><p>${t('empty_sub')}</p>`;
+      wrap.appendChild(e);
+    }
+
+    devs.forEach((d) => {
+      const id = devId(d);
+      const card = document.createElement('div');
+      card.className = 'devcard reveal-in';
+      card.innerHTML = `
+        <button class="devmain" aria-label="${t('connect')}">
+          <span class="dev-av">${osGlyph(d.os)}</span>
+          <span class="dev-meta">
+            <span class="dev-name"></span>
+            <span class="dev-sub">${d.lastUsed ? t('last_used') + ' · ' + timeAgo(d.lastUsed) : ''}</span>
+          </span>
+          <span class="dev-go">${ZRIcon.svg('cursor', 1.5)}</span>
+        </button>
+        <button class="dev-more" aria-label="${t('settings')}">⋯</button>
+        <div class="dev-menu" hidden>
+          <button data-act="rename">${t('rename')}</button>
+          <button data-act="remove" class="danger">${t('remove')}</button>
+        </div>`;
+      card.querySelector('.dev-name').textContent = d.name || t('unknown_device');
+
+      card.querySelector('.devmain').addEventListener('click', () => connectTo(d));
+      const menu = card.querySelector('.dev-menu');
+      card.querySelector('.dev-more').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const wasOpen = !menu.hidden;
+        document.querySelectorAll('.dev-menu').forEach((m) => (m.hidden = true));
+        menu.hidden = wasOpen;
+      });
+      menu.querySelector('[data-act="rename"]').addEventListener('click', () => {
+        const name = prompt(t('rename_ph'), d.name || '');
+        if (name != null && name.trim()) { renameById(id, name.trim()); render(); }
+      });
+      menu.querySelector('[data-act="remove"]').addEventListener('click', () => {
+        if (confirm(t('remove_q'))) { removeById(id); render(); }
+      });
+      wrap.appendChild(card);
+    });
+  }
+  document.addEventListener('click', () => document.querySelectorAll('.dev-menu').forEach((m) => (m.hidden = true)));
+
+  // ── add device ─────────────────────────────────────────────────────────────
+  let scanStream = null, scanRAF = null, detector = null;
+
+  function openAdd() {
+    $('addTitle').textContent = t('add_title');
+    $('scanBtnLabel').textContent = t('add_scan');
+    $('scanHint').textContent = t('add_scan_hint');
+    $('pasteL').textContent = t('add_paste');
+    $('pasteInput').placeholder = t('add_paste_ph');
+    $('pasteGoLabel').textContent = t('add_go');
+    $('addErr').hidden = true;
+    $('addSheet').hidden = false;
+    // hide the scan button on browsers without BarcodeDetector + camera
+    const canScan = ('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+    $('scanBtn').hidden = !canScan;
+    if (!canScan) { $('scanHint').textContent = t('scan_unsupported'); }
+  }
+  function closeAdd() { stopScan(); $('addSheet').hidden = true; }
+
+  function showErr(msg) { const e = $('addErr'); e.textContent = msg; e.hidden = false; }
+
+  function parseLink(s) {
+    if (!s) return null;
+    s = s.trim();
+    const km = s.match(/[#&]k=([A-Za-z0-9\-_]+)/);
+    if (!km) return null;
+    const key = km[1];
+    const rm = s.match(/\/r\/([A-Za-z0-9]{4,8})/i);
+    const persistent = /[#&]p=1\b/.test(s);
+    return { key, room: rm ? rm[1].toUpperCase() : null, persistent };
+  }
+
+  async function go(target) {
+    let room = target.room;
+    if (!room && target.persistent) { try { room = await ZRCrypto.deriveRoom(target.key); } catch {} }
+    if (!room) { showErr(t('add_bad')); return; }
+    location.href = `/r/${room}#k=${target.key}` + (target.persistent ? '&p=1' : '');
+  }
+
+  async function startScan() {
+    try {
+      detector = new BarcodeDetector({ formats: ['qr_code'] });
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch (e) {
+      showErr(t('scan_denied')); return;
+    }
+    const v = $('scanVideo');
+    v.srcObject = scanStream; await v.play().catch(() => {});
+    $('scanbox').classList.add('live');
+    const tick = async () => {
+      if (!scanStream) return;
+      try {
+        const codes = await detector.detect(v);
+        for (const c of codes) {
+          const target = parseLink(c.rawValue || '');
+          if (target) { stopScan(); return go(target); }
+        }
+      } catch {}
+      scanRAF = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  function stopScan() {
+    if (scanRAF) cancelAnimationFrame(scanRAF), (scanRAF = null);
+    if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+    $('scanbox').classList.remove('live');
+  }
+
+  function wireAdd() {
+    $('addDevice').addEventListener('click', openAdd);
+    $('addClose').addEventListener('click', closeAdd);
+    $('addSheet').addEventListener('click', (e) => { if (e.target === $('addSheet')) closeAdd(); });
+    $('scanBtn').addEventListener('click', startScan);
+    $('pasteGo').addEventListener('click', () => {
+      const target = parseLink($('pasteInput').value);
+      if (!target) { showErr(t('add_bad')); return; }
+      go(target);
+    });
+    $('pasteInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pasteGo').click(); });
+  }
+
+  // called by app.js after a successful pair to remember a persistent device
+  function saveFromWelcome(info) {
+    if (!info || !info.persistent || !info.key) return null;
+    return upsert({ name: info.name || t('new_device'), os: info.os || '', key: info.key, room: info.room, persistent: true });
+  }
+
+  function init() {
+    wireAdd();
+    render();
+    // PWA shortcut / deep link: /r/?add=1 opens the add sheet straight away
+    if (/[?&]add=1\b/.test(location.search)) openAdd();
+  }
+
+  return { init, render, saveFromWelcome, openAdd };
+})();

@@ -57,6 +57,25 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", http.StripPrefix("/app/", http.FileServer(http.FS(sub))))
+	// PWA manifest + service worker are referenced at the origin root; serve
+	// them from the embed so the installable shell also works in LAN mode.
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		if b, err := fs.ReadFile(sub, "sw.js"); err == nil {
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			w.Header().Set("Service-Worker-Allowed", "/")
+			w.Write(b)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+	mux.HandleFunc("/app.webmanifest", func(w http.ResponseWriter, r *http.Request) {
+		if b, err := fs.ReadFile(sub, "app.webmanifest"); err == nil {
+			w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
+			w.Write(b)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

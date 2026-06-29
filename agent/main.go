@@ -12,7 +12,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 const banner = `
   ┌──────────────────────────────────────────┐
@@ -26,6 +26,8 @@ func main() {
 	port := flag.Int("port", 9783, "LAN mode listen port")
 	relay := flag.String("relay", "remote.zlef.fr", "relay host for remote mode")
 	noTelemetry := flag.Bool("no-telemetry", false, "disable the anonymous startup usage ping")
+	remember := flag.Bool("remember", false, "persist this computer's encryption key locally so saved phones reconnect in one tap (room is derived from the stable key; default mints a fresh key per launch)")
+	resetIdentity := flag.Bool("reset-identity", false, "with --remember: discard the stored key and mint a new one (rotates this computer's saved-device address)")
 	machine := flag.Bool("machine", false, "emit machine-readable '@zr key=value' lines for front-ends (e.g. the xfce4-panel plugin)")
 	update := flag.Bool("update", false, "update the agent in place to the latest release, then exit")
 	force := flag.Bool("force", false, "with -update: reinstall even if already up to date")
@@ -64,7 +66,26 @@ func main() {
 		fmt.Printf("  host: %s (%s)\n", name, goos)
 	}
 
-	key, keyB64 := NewKey()
+	// Identity: persistent (--remember) or ephemeral (default, fresh per launch).
+	var key []byte
+	var keyB64 string
+	persistent := *remember
+	if persistent {
+		var ierr error
+		key, keyB64, ierr = loadOrCreateIdentity(*resetIdentity)
+		if ierr != nil {
+			fmt.Fprintln(os.Stderr, "could not open the saved identity:", ierr)
+			fmt.Fprintln(os.Stderr, "falling back to a fresh key for this session.")
+			key, keyB64 = NewKey()
+			persistent = false
+		} else if !machineMode {
+			fmt.Printf("  identity: remembered (saved phones reconnect in one tap)\n")
+		}
+	} else {
+		key, keyB64 = NewKey()
+	}
+	emit("persistent", boolStr(persistent))
+
 	sealer, err := NewSealer(key)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "crypto init failed:", err)
@@ -85,7 +106,7 @@ func main() {
 		}
 	case "remote", "r", "2":
 		pingUsage("remote", *noTelemetry)
-		if err := runRelay(sealer, inj, keyB64, *relay); err != nil {
+		if err := runRelay(sealer, inj, key, keyB64, *relay, persistent); err != nil {
 			fmt.Fprintln(os.Stderr, "remote mode error:", err)
 			os.Exit(1)
 		}
@@ -93,6 +114,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "unknown mode:", m)
 		os.Exit(2)
 	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 func prompt() string {

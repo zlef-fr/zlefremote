@@ -14,6 +14,16 @@
   let paired = false;
   const stickyMods = new Set();
 
+  // ── small toast ────────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('toast'); el.textContent = msg; el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('show'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.classList.remove('show'); setTimeout(() => (el.hidden = true), 300); }, 3200);
+  }
+  const goHome = () => { location.href = '/r/'; };
+
   // ── static labels ──────────────────────────────────────────────────────
   $('padHint').textContent = t('hint_pad');
   $('tlPad').textContent = t('tab_pad');
@@ -36,7 +46,8 @@
 
   // ── connection state machine ───────────────────────────────────────────
   const ov = $('overlay'), ovTitle = $('ovTitle'), ovText = $('ovText'),
-        ovBtn = $('ovBtn'), ovSpin = $('ovSpin'), ovIcon = $('ovIcon'), dot = $('dot'), stLabel = $('stLabel');
+        ovBtn = $('ovBtn'), ovHome = $('ovHome'), ovSpin = $('ovSpin'), ovIcon = $('ovIcon'),
+        dot = $('dot'), stLabel = $('stLabel');
 
   function showOverlay(title, text, opts = {}) {
     ov.hidden = false;
@@ -46,6 +57,9 @@
     if (opts.icon) ovIcon.innerHTML = ZRIcon.svg(opts.icon, 1.5);
     if (opts.btn) { ovBtn.hidden = false; ovBtn.textContent = opts.btn; ovBtn.onclick = opts.onClick; }
     else ovBtn.hidden = true;
+    // the "Devices" escape hatch shows whenever we're not actively connecting
+    ovHome.hidden = !opts.home;
+    if (opts.home) { ovHome.textContent = t('back_home'); ovHome.onclick = goHome; }
   }
   function hideOverlay() { ov.hidden = true; }
   function setStatus(label, cls) { stLabel.textContent = label; dot.className = 'dot ' + (cls || ''); }
@@ -59,13 +73,19 @@
     }
   });
   ZRConn.on('error', (e) => {
-    const msg = e === 'no_such_room' ? t('err_room') : e === 'room_full' ? t('err_full') : t('err_connect');
-    showOverlay('', msg, { icon: 'warn', btn: t('reconnect'), onClick: () => location.reload() });
+    // a saved (persistent) device whose room is gone = the computer is offline
+    if (e === 'no_such_room' && ZRConn.isPersistent()) {
+      showOverlay(t('offline_title'), t('offline_sub'),
+        { icon: 'plug', btn: t('try_again'), onClick: () => location.reload(), home: true });
+    } else {
+      const msg = e === 'no_such_room' ? t('err_room') : e === 'room_full' ? t('err_full') : t('err_connect');
+      showOverlay('', msg, { icon: 'warn', btn: t('reconnect'), onClick: () => location.reload(), home: true });
+    }
     setStatus(t('closed'), 'bad'); paired = false;
   });
   ZRConn.on('closed', (reason) => {
     showOverlay('', reason === 'host_left' ? t('closed_host') : t('closed'),
-      { icon: 'plug', btn: t('reconnect'), onClick: () => location.reload() });
+      { icon: 'plug', btn: t('reconnect'), onClick: () => location.reload(), home: true });
     setStatus(t('closed'), 'bad'); paired = false;
   });
 
@@ -77,6 +97,16 @@
       setStatus(t('paired'), 'ok');
       $('hostName').textContent = c.name || '';
       vibrate(20);
+      // remember persistent computers so they reconnect from Home in one tap
+      if (ZRConn.isPersistent()) {
+        ZRHome.saveFromWelcome({
+          name: c.name, os: c.os, key: ZRConn.getKeyB64(),
+          room: ZRConn.getRoom(), persistent: true,
+        });
+        toast(t('saved_toast'));
+      } else {
+        toast(t('ephemeral_note'));
+      }
     }
   });
 
@@ -199,8 +229,23 @@
   // keep the screen awake while controlling
   let wakeLock = null;
   async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
-  keepAwake();
 
-  ZRConn.start();
+  // ── mode routing: home (device picker) vs control ──────────────────────────
+  $('homeBtn').addEventListener('click', goHome);
+
+  function showControl() {
+    document.body.classList.add('mode-control');
+    $('topbar').hidden = false; $('stage').hidden = false; $('tabs').hidden = false;
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+    keepAwake();
+    ZRConn.start();
+  }
+  function showHomeScreen() {
+    document.body.classList.add('mode-home');
+    $('viewHome').hidden = false;
+    ZRHome.init();
+  }
+
+  if (ZRConn.hasTarget()) showControl();
+  else showHomeScreen();
 })();

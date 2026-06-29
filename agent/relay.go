@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,9 +12,26 @@ import (
 
 // runRelay pairs the agent through remote.zlef.fr. The relay only ever sees a
 // room code and opaque ciphertext — it cannot read any input.
-func runRelay(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
+//
+// With persistent=true the agent asks the relay for a STABLE room derived from
+// its saved key, so a remembered phone reconnects to the same address without a
+// new QR. The pairing URL then carries &p=1, telling the phone this device is
+// reconnectable and can be saved.
+func runRelay(sealer *Sealer, inj Injector, key []byte, keyB64, relayHost string, persistent bool) error {
+	desiredRoom := ""
+	if persistent {
+		desiredRoom = deriveRoom(key)
+	}
 	for {
-		err := relayOnce(sealer, inj, keyB64, relayHost)
+		err := relayOnce(sealer, inj, keyB64, relayHost, desiredRoom, persistent)
+		if errors.Is(err, errRoomTaken) {
+			// stable room unavailable (collision) — degrade to a random room.
+			desiredRoom, persistent = "", false
+			if !machineMode {
+				fmt.Printf("\n  saved-device address was busy — using a one-time room this session.\n")
+			}
+			continue
+		}
 		emit("event", "disconnect")
 		if !machineMode {
 			fmt.Printf("\n  relay disconnected (%v) — reconnecting in 3s…\n", err)
@@ -22,7 +40,9 @@ func runRelay(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 	}
 }
 
-func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
+var errRoomTaken = errors.New("room_taken")
+
+func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost, desiredRoom string, persistent bool) error {
 	ctx := context.Background()
 	wsURL := "wss://" + relayHost + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
@@ -32,8 +52,9 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 	defer c.CloseNow()
 	c.SetReadLimit(128 * 1024)
 
-	// register as a host
-	hb, _ := json.Marshal(frame{T: "host"})
+	// register as a host. When we have a persistent identity, ask the relay for
+	// our derived room so saved phones find us at the same address every time.
+	hb, _ := json.Marshal(frame{T: "host", Room: desiredRoom})
 	if err := c.Write(ctx, websocket.MessageText, hb); err != nil {
 		return err
 	}
@@ -52,7 +73,15 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 		}
 		switch f.T {
 		case "hosted":
-			url := fmt.Sprintf("https://%s/r/%s#k=%s", relayHost, f.Room, keyB64)
+			// &p=1 marks this device as persistent so the phone offers to save
+			// it. If the relay couldn't grant our derived room (collision), we
+			// took a random one — drop the flag so the phone won't try to
+			// silently re-derive an address that won't match.
+			frag := "#k=" + keyB64
+			if persistent && f.Room == desiredRoom {
+				frag += "&p=1"
+			}
+			url := fmt.Sprintf("https://%s/r/%s%s", relayHost, f.Room, frag)
 			emit("mode", "remote")
 			emit("room", f.Room)
 			if !machineMode {
@@ -87,6 +116,12 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost string) error {
 				c.Write(ctx, websocket.MessageText, out)
 			}
 		case "error":
+			if f.Error == "room_taken" {
+				// our derived room is held by a different live device (a hash
+				// collision — vanishingly rare). Signal runRelay to fall back to
+				// a random room for the rest of this run.
+				return errRoomTaken
+			}
 			return fmt.Errorf("relay error: %s", f.Error)
 		case "closed":
 			return fmt.Errorf("relay closed: %s", f.Error)

@@ -44,10 +44,34 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent --mode remote   # pair through remote.zlef.fr (E2EE)
 ./zlefremote-agent --mode lan --port 8080
 ./zlefremote-agent --mode remote --relay remote.zlef.fr
+./zlefremote-agent --mode remote --remember   # remember this computer (see below)
+./zlefremote-agent --remember --reset-identity # rotate the remembered key/room
 ./zlefremote-agent --no-telemetry  # disable the anonymous usage ping (see below)
 ./zlefremote-agent -update         # update the binary in place to the latest release
 ./zlefremote-agent -update -force  # reinstall even if already current
 ```
+
+### Saved devices & the installable phone app (PWA)
+
+The phone client at `remote.zlef.fr/r/` is an installable PWA ("Add to home
+screen"). Its home screen lists your **saved computers** — tap one to reconnect
+in a single tap, or "Add a device" to scan/paste a new pairing link.
+
+Reconnect-in-one-tap needs a **stable address**, which is opt-in via
+`--remember`:
+
+* By default the agent mints a **fresh key every launch** and the relay hands it
+  a **random room** — nothing is stored, and a session is unreachable once it
+  ends (the privacy-maximal default).
+* With `--remember` the agent persists its 256-bit key locally
+  (`<user-config>/zlefremote/identity`, mode `0600`) and asks the relay for a
+  room **derived from that key** by a one-way hash. The pairing URL then carries
+  `&p=1`, so the phone offers to save the device and can recompute the same room
+  on every future launch — no rescan. Rotate with `--reset-identity`.
+
+The derivation is one-way, so the room reveals nothing about the key and is
+never sent to any server; only a device that already holds the key (i.e. yours)
+can compute it.
 
 The agent checks `https://remote.zlef.fr/api/agent/version` for a newer build on
 startup (a one-line stderr hint; disable with `-no-update-check`). `-update`

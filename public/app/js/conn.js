@@ -6,6 +6,7 @@
 const ZRConn = (() => {
   let ws = null, mode = 'direct', room = null, cbs = {}, state = 'init';
   let reconnectTimer = null, manualClose = false;
+  let keyB64 = null, persistent = false;
 
   function on(ev, fn) { cbs[ev] = fn; }
   function emit(ev, d) { if (cbs[ev]) cbs[ev](d); }
@@ -15,6 +16,10 @@ const ZRConn = (() => {
     const m = location.hash.match(/k=([A-Za-z0-9\-_]+)/);
     return m ? m[1] : null;
   }
+  // a persistent agent appends &p=1 — the device can be saved & reconnected.
+  function parsePersistent() { return /[#&]p=1\b/.test(location.hash); }
+  // is there a target to connect to at all? (relay room+key, or direct key)
+  function hasTarget() { return !!parseKey(); }
 
   function detect() {
     const rm = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/i);
@@ -26,6 +31,8 @@ const ZRConn = (() => {
     detect();
     const k = parseKey();
     if (!k) { setState('nokey'); return; }
+    keyB64 = k;
+    persistent = parsePersistent();
     try { await ZRCrypto.init(k); } catch { setState('nokey'); return; }
     connect();
   }
@@ -89,5 +96,9 @@ const ZRConn = (() => {
 
   setInterval(() => { if (ws && ws.readyState === 1) try { ws.send(JSON.stringify({ t: 'ping' })); } catch {} }, 25000);
 
-  return { start, send, on, close, markPaired, getState: () => state, getMode: () => mode };
+  return {
+    start, send, on, close, markPaired, hasTarget,
+    getState: () => state, getMode: () => mode,
+    getRoom: () => room, getKeyB64: () => keyB64, isPersistent: () => persistent,
+  };
 })();

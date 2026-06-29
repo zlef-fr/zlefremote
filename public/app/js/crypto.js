@@ -25,6 +25,22 @@ const ZRCrypto = (() => {
     key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
   }
 
+  // deriveRoom maps a base64url key to its stable 6-char relay room — byte-for-
+  // byte identical to the agent (agent/identity.go) so a saved phone holding the
+  // key alone can recompute the exact room a persistent agent will host on.
+  const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  async function deriveRoom(rawKeyB64u) {
+    const raw = b64u.dec(rawKeyB64u);
+    if (raw.length !== 32) throw new Error('bad key length');
+    const domain = new TextEncoder().encode('zlefremote-room-v1\0');
+    const buf = new Uint8Array(domain.length + raw.length);
+    buf.set(domain, 0); buf.set(raw, domain.length);
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+    let room = '';
+    for (let i = 0; i < 6; i++) room += ROOM_ALPHABET[h[i] & 31];
+    return room;
+  }
+
   async function seal(obj) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const pt = new TextEncoder().encode(JSON.stringify(obj));
@@ -41,5 +57,5 @@ const ZRCrypto = (() => {
     return JSON.parse(new TextDecoder().decode(pt));
   }
 
-  return { init, seal, open, ready: () => !!key };
+  return { init, seal, open, deriveRoom, ready: () => !!key };
 })();
