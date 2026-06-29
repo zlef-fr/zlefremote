@@ -17,7 +17,12 @@
 <link rel="manifest" href="/app.webmanifest">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=3">
+<link rel="stylesheet" href="/app/css/client.css?v=4">
+<!-- InstallKit: accurate per-device "install this PWA" steps. mode=manual → no
+     floating FAB; the home screen's Install button calls InstallKit.open(). -->
+<script defer src="https://installkit.zlef.fr/v1/install-kit.js"
+  data-mode="manual" data-app-name="ZlefRemote" data-site="remote.zlef.fr"
+  data-theme="dark" data-accent="#9dae50"></script>
 </head>
 <body>
 <!-- connection overlay -->
@@ -35,8 +40,8 @@
 <!-- ░░ HOME / device picker ░░ -->
 <section class="view-home" id="viewHome" hidden>
   <header class="home-top">
-    <span class="brand-mark">◑</span>
-    <span class="brand-name">Zlef<b>Remote</b></span>
+    <span class="home-brand"><span class="brand-mark">◑</span><span class="brand-name">Zlef<b>Remote</b></span></span>
+    <button class="installpill" id="installBtn" hidden></button>
   </header>
   <div class="home-head">
     <h1 id="homeTitle"></h1>
@@ -128,7 +133,7 @@
 <script src="/app/js/crypto.js?v=2"></script>
 <script src="/app/js/conn.js?v=2"></script>
 <script src="/app/js/input.js?v=1"></script>
-<script src="/app/js/home.js?v=1"></script>
+<script src="/app/js/home.js?v=2"></script>
 <script src="/app/js/app.js?v=3"></script>
 <script>
   if ('serviceWorker' in navigator) {

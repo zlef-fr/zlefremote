@@ -127,10 +127,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 body.mode-home { overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
 .view-home { flex: 1 1 auto; display: flex; flex-direction: column; gap: 18px;
   padding: calc(18px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom)); max-width: 560px; width: 100%; margin: 0 auto; }
-.home-top { display: flex; align-items: center; gap: 9px; font-size: 17px; color: var(--zl-text-soft); }
+.home-top { display: flex; align-items: center; justify-content: space-between; gap: 9px; font-size: 17px; color: var(--zl-text-soft); }
+.home-brand { display: inline-flex; align-items: center; gap: 9px; }
 .home-top .brand-mark { color: var(--zl-accent-soft); font-size: 20px; }
 .home-top .brand-name b { color: var(--zl-text); font-weight: 800; }
 .home-top .brand-name { font-weight: 500; letter-spacing: .2px; }
+.installpill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700;
+  color: var(--zl-accent-soft); background: var(--zl-accent-wash); border: 1px solid rgba(157,174,80,.35);
+  border-radius: 999px; padding: 7px 14px; transition: background .15s, transform .06s; }
+.installpill::before { content: '⤓'; font-size: 14px; line-height: 1; }
+.installpill:active { transform: translateY(1px); background: rgba(157,174,80,.18); }
 .home-head h1 { font-size: 27px; margin: 4px 0 6px; line-height: 1.1; letter-spacing: -.4px; }
 .home-head p { margin: 0; color: var(--zl-text-muted); font-size: 15px; }
 

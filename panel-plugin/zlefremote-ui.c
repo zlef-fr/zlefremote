@@ -33,6 +33,10 @@ static const ZrStr STRINGS[] = {
   { "st_starting",  "Starting…",                         "Démarrage…" },
   { "st_waiting",   "Scan the code with your phone",      "Scannez le code avec votre téléphone" },
   { "st_paired",    "Phone connected",                   "Téléphone connecté" },
+  { "remember",     "Remember this computer",            "Mémoriser cet ordinateur" },
+  { "remember_d",   "Saved phones reconnect in one tap",  "Les téléphones enregistrés se reconnectent en un geste" },
+  { "saved_hint",   "Saved — your phone can reconnect to this computer anytime",
+                    "Enregistré — votre téléphone peut se reconnecter à cet ordinateur à tout moment" },
   { "clients_1",    "1 phone connected",                 "1 téléphone connecté" },
   { "clients_n",    "%d phones connected",               "%d téléphones connectés" },
   { "copy",         "Copy link",                         "Copier le lien" },
@@ -69,6 +73,7 @@ struct _ZrApp {
   GString   *linebuf;      /* partial stdout line accumulator */
 
   gboolean   remote_mode;  /* TRUE = remote, FALSE = lan */
+  gboolean   persistent;   /* TRUE once the agent reports a remembered identity */
   ZrStatus   status;
   char      *url;
   char      *qr_path;
@@ -79,6 +84,8 @@ struct _ZrApp {
   GtkWidget *root;
   GtkWidget *mode_lan;
   GtkWidget *mode_remote;
+  GtkWidget *remember_chk; /* "remember this computer" (remote mode only) */
+  GtkWidget *saved_lbl;    /* shown in the pairing box when persistent */
   GtkWidget *start_btn;
   GtkWidget *start_lbl;
   GtkWidget *status_lbl;
@@ -140,9 +147,14 @@ static void set_status(ZrApp *app, ZrStatus st) {
   gtk_label_set_text(GTK_LABEL(app->start_lbl), running ? zr_t("stop") : zr_t("start"));
   gtk_widget_set_sensitive(app->mode_lan, !running);
   gtk_widget_set_sensitive(app->mode_remote, !running);
+  /* "remember" only applies to remote mode and can't be toggled mid-session */
+  if (app->remember_chk)
+    gtk_widget_set_sensitive(app->remember_chk, !running && app->remote_mode);
 
   gboolean show_pair = (st == ZR_WAITING || st == ZR_PAIRED) && app->url;
   gtk_widget_set_visible(app->pair_box, show_pair);
+  if (app->saved_lbl)
+    gtk_widget_set_visible(app->saved_lbl, show_pair && app->persistent);
 
   /* paired: dim the QR slightly via opacity to signal "in use" */
   if (app->qr_img)
@@ -236,6 +248,13 @@ static void handle_line(ZrApp *app, const char *line) {
     } else if (strcmp(key, "clients") == 0) {
       /* authoritative count; 0 means the roster was reset (relay drop) */
       if (atoi(val) == 0) peers_clear(app);
+    } else if (strcmp(key, "persistent") == 0) {
+      /* the agent has a remembered identity → its room is stable and the phone
+       * can save it; surface the "saved" hint in the pairing box. */
+      app->persistent = (strcmp(val, "1") == 0);
+      if (app->saved_lbl)
+        gtk_widget_set_visible(app->saved_lbl,
+            app->persistent && (app->status == ZR_WAITING || app->status == ZR_PAIRED));
     } else if (strcmp(key, "event") == 0) {
       if (strcmp(val, "paired") == 0)      set_status(app, ZR_PAIRED);
       else if (strcmp(val, "disconnect") == 0) { peers_clear(app); if (app->pid) set_status(app, ZR_WAITING); }
@@ -276,6 +295,7 @@ static void clear_process(ZrApp *app) {
   if (app->child_watch) { g_source_remove(app->child_watch); app->child_watch = 0; }
   if (app->pid)         { g_spawn_close_pid(app->pid); app->pid = 0; }
   g_string_truncate(app->linebuf, 0);
+  app->persistent = FALSE;
   g_clear_pointer(&app->url, g_free);
   g_clear_pointer(&app->qr_path, g_free);
   /* drop the roster data only — rendering is done by callers that still have
@@ -311,8 +331,18 @@ static void start_agent(ZrApp *app) {
     return;
   }
 
-  const char *mode = app->remote_mode ? "remote" : "lan";
-  char *argv[] = { app->agent_path, (char*)"-machine", (char*)"-mode", (char*)mode, NULL };
+  /* remember only in remote mode + when the box is ticked */
+  gboolean remember = app->remote_mode && app->remember_chk &&
+      gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->remember_chk));
+
+  char *argv[6];
+  int n = 0;
+  argv[n++] = app->agent_path;
+  argv[n++] = (char*)"-machine";
+  argv[n++] = (char*)"-mode";
+  argv[n++] = (char*)(app->remote_mode ? "remote" : "lan");
+  if (remember) argv[n++] = (char*)"-remember";
+  argv[n] = NULL;
 
   GError *e = NULL;
   gint outfd = -1;
@@ -353,8 +383,13 @@ static void on_start_clicked(GtkButton *b, gpointer data) {
 
 static void on_mode_toggled(GtkToggleButton *b, gpointer data) {
   ZrApp *app = data;
-  if (gtk_toggle_button_get_active(b))
+  if (gtk_toggle_button_get_active(b)) {
     app->remote_mode = (GTK_WIDGET(b) == app->mode_remote);
+    /* the "remember" option is meaningless on a LAN (the address is the
+     * machine's local IP, not a relay room) — enable it only for remote. */
+    if (app->remember_chk)
+      gtk_widget_set_sensitive(app->remember_chk, app->remote_mode);
+  }
 }
 
 static gboolean reset_copy_label(gpointer data) {
@@ -428,6 +463,26 @@ static void build_ui(ZrApp *app) {
   gtk_box_pack_start(GTK_BOX(root), app->mode_lan, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(root), app->mode_remote, FALSE, FALSE, 0);
 
+  /* remember toggle — remote only (insensitive while LAN is selected) */
+  app->remember_chk = gtk_check_button_new();
+  {
+    GtkWidget *cbx = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *ct = gtk_label_new(zr_t("remember"));
+    gtk_widget_set_halign(ct, GTK_ALIGN_START);
+    GtkWidget *cd = gtk_label_new(zr_t("remember_d"));
+    gtk_widget_set_halign(cd, GTK_ALIGN_START);
+    gtk_style_context_add_class(gtk_widget_get_style_context(cd), "dim-label");
+    PangoAttrList *cal = pango_attr_list_new();
+    pango_attr_list_insert(cal, pango_attr_scale_new(0.85));
+    gtk_label_set_attributes(GTK_LABEL(cd), cal);
+    pango_attr_list_unref(cal);
+    gtk_box_pack_start(GTK_BOX(cbx), ct, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(cbx), cd, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(app->remember_chk), cbx);
+  }
+  gtk_widget_set_sensitive(app->remember_chk, FALSE); /* LAN is the default */
+  gtk_box_pack_start(GTK_BOX(root), app->remember_chk, FALSE, FALSE, 0);
+
   /* start/stop */
   app->start_btn = gtk_button_new();
   app->start_lbl = gtk_label_new(zr_t("start"));
@@ -470,6 +525,22 @@ static void build_ui(ZrApp *app) {
   gtk_container_add(GTK_CONTAINER(qr_frame), qr_pad);
   gtk_widget_set_halign(qr_frame, GTK_ALIGN_CENTER);
   gtk_box_pack_start(GTK_BOX(app->pair_box), qr_frame, FALSE, FALSE, 0);
+
+  /* "saved" hint — shown only when the agent reports a remembered identity */
+  app->saved_lbl = gtk_label_new(zr_t("saved_hint"));
+  gtk_label_set_line_wrap(GTK_LABEL(app->saved_lbl), TRUE);
+  gtk_label_set_justify(GTK_LABEL(app->saved_lbl), GTK_JUSTIFY_CENTER);
+  gtk_widget_set_halign(app->saved_lbl, GTK_ALIGN_CENTER);
+  {
+    PangoAttrList *sal = pango_attr_list_new();
+    pango_attr_list_insert(sal, pango_attr_scale_new(0.85));
+    gtk_label_set_attributes(GTK_LABEL(app->saved_lbl), sal);
+    pango_attr_list_unref(sal);
+  }
+  gtk_style_context_add_class(gtk_widget_get_style_context(app->saved_lbl), "dim-label");
+  gtk_widget_set_no_show_all(app->saved_lbl, TRUE);
+  gtk_widget_set_visible(app->saved_lbl, FALSE);
+  gtk_box_pack_start(GTK_BOX(app->pair_box), app->saved_lbl, FALSE, FALSE, 0);
 
   GtkWidget *hint = gtk_label_new(zr_t("open_phone"));
   gtk_style_context_add_class(gtk_widget_get_style_context(hint), "dim-label");

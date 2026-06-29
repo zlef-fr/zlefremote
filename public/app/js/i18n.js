@@ -36,6 +36,7 @@ const ZRI18n = (() => {
       offline_title: 'Computer is offline', offline_sub: 'It isn’t reachable right now. Start ZlefRemote on it (with --remember), then try again.',
       try_again: 'Try again', back_home: 'Devices', save_device: 'Save this device',
       new_device: 'New computer', unknown_device: 'Computer',
+      install_app: 'Install app',
     },
     fr: {
       connecting: 'Connexion…', linking: 'Appairage sécurisé…', reconnecting: 'Reconnexion…',
@@ -71,6 +72,7 @@ const ZRI18n = (() => {
       offline_title: 'Ordinateur hors ligne', offline_sub: 'Il n’est pas joignable pour le moment. Lancez ZlefRemote dessus (avec --remember), puis réessayez.',
       try_again: 'Réessayer', back_home: 'Appareils', save_device: 'Enregistrer cet appareil',
       new_device: 'Nouvel ordinateur', unknown_device: 'Ordinateur',
+      install_app: 'Installer l’app',
     },
   };
   function lang() {
