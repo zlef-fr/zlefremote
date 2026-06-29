@@ -7,5 +7,5 @@ Comment=Turn your phone into a wireless trackpad & keyboard
 Comment[fr]=Transformez votre téléphone en trackpad et clavier sans fil
 Icon=zlefremote
 X-XFCE-Module=zlefremote
-X-XFCE-Internal=TRUE
+X-XFCE-Internal=FALSE
 X-XFCE-API=2.0
