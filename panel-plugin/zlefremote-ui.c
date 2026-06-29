@@ -35,6 +35,8 @@ static const ZrStr STRINGS[] = {
   { "st_paired",    "Phone connected",                   "Téléphone connecté" },
   { "remember",     "Remember this computer",            "Mémoriser cet ordinateur" },
   { "remember_d",   "Saved phones reconnect in one tap",  "Les téléphones enregistrés se reconnectent en un geste" },
+  { "remember_old", "Update the ZlefRemote agent (1.1.0+) to use this",
+                    "Mettez à jour l'agent ZlefRemote (1.1.0+) pour l'utiliser" },
   { "saved_hint",   "Saved — your phone can reconnect to this computer anytime",
                     "Enregistré — votre téléphone peut se reconnecter à cet ordinateur à tout moment" },
   { "clients_1",    "1 phone connected",                 "1 téléphone connecté" },
@@ -74,6 +76,7 @@ struct _ZrApp {
 
   gboolean   remote_mode;  /* TRUE = remote, FALSE = lan */
   gboolean   persistent;   /* TRUE once the agent reports a remembered identity */
+  gboolean   agent_remember; /* TRUE if the resolved agent supports --remember */
   ZrStatus   status;
   char      *url;
   char      *qr_path;
@@ -128,6 +131,23 @@ static char *find_agent(void) {
   return found;
 }
 
+/* Does the resolved agent understand --remember? Older agents (<1.1.0) abort on
+ * the unknown flag and exit immediately, which looked like "Start does nothing".
+ * We probe `agent -help` once and only offer Remember when it's actually there,
+ * so the option degrades gracefully across agent versions on $PATH. */
+static gboolean probe_remember(const char *agent) {
+  if (!agent) return FALSE;
+  char *out = NULL, *err = NULL;
+  char *argv[] = { (char*)agent, (char*)"-help", NULL };
+  /* flags = 0: capture both stdout and stderr (Go's flag prints usage to stderr) */
+  gboolean spawned = g_spawn_sync(NULL, argv, NULL, 0,
+      NULL, NULL, &out, &err, NULL, NULL);
+  gboolean has = (out && strstr(out, "-remember")) || (err && strstr(err, "-remember"));
+  g_free(out); g_free(err);
+  (void) spawned;
+  return has;
+}
+
 /* ── status transitions ───────────────────────────────────────────────────*/
 
 static void set_status(ZrApp *app, ZrStatus st) {
@@ -147,9 +167,11 @@ static void set_status(ZrApp *app, ZrStatus st) {
   gtk_label_set_text(GTK_LABEL(app->start_lbl), running ? zr_t("stop") : zr_t("start"));
   gtk_widget_set_sensitive(app->mode_lan, !running);
   gtk_widget_set_sensitive(app->mode_remote, !running);
-  /* "remember" only applies to remote mode and can't be toggled mid-session */
+  /* "remember" only applies to remote mode, needs an agent that supports it,
+   * and can't be toggled mid-session */
   if (app->remember_chk)
-    gtk_widget_set_sensitive(app->remember_chk, !running && app->remote_mode);
+    gtk_widget_set_sensitive(app->remember_chk,
+        !running && app->remote_mode && app->agent_remember);
 
   gboolean show_pair = (st == ZR_WAITING || st == ZR_PAIRED) && app->url;
   gtk_widget_set_visible(app->pair_box, show_pair);
@@ -331,8 +353,8 @@ static void start_agent(ZrApp *app) {
     return;
   }
 
-  /* remember only in remote mode + when the box is ticked */
-  gboolean remember = app->remote_mode && app->remember_chk &&
+  /* remember only in remote mode, with a capable agent, and the box ticked */
+  gboolean remember = app->agent_remember && app->remote_mode && app->remember_chk &&
       gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->remember_chk));
 
   char *argv[6];
@@ -386,9 +408,10 @@ static void on_mode_toggled(GtkToggleButton *b, gpointer data) {
   if (gtk_toggle_button_get_active(b)) {
     app->remote_mode = (GTK_WIDGET(b) == app->mode_remote);
     /* the "remember" option is meaningless on a LAN (the address is the
-     * machine's local IP, not a relay room) — enable it only for remote. */
+     * machine's local IP, not a relay room) — enable it only for remote, and
+     * only when the resolved agent actually supports --remember. */
     if (app->remember_chk)
-      gtk_widget_set_sensitive(app->remember_chk, app->remote_mode);
+      gtk_widget_set_sensitive(app->remember_chk, app->remote_mode && app->agent_remember);
   }
 }
 
@@ -481,6 +504,9 @@ static void build_ui(ZrApp *app) {
     gtk_container_add(GTK_CONTAINER(app->remember_chk), cbx);
   }
   gtk_widget_set_sensitive(app->remember_chk, FALSE); /* LAN is the default */
+  /* if the resolved agent is too old for --remember, say why on hover */
+  if (!app->agent_remember)
+    gtk_widget_set_tooltip_text(app->remember_chk, zr_t("remember_old"));
   gtk_box_pack_start(GTK_BOX(root), app->remember_chk, FALSE, FALSE, 0);
 
   /* start/stop */
@@ -579,6 +605,7 @@ ZrApp *zr_app_new(void) {
   app->status = ZR_IDLE;
   app->peers = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
   app->agent_path = find_agent();
+  app->agent_remember = probe_remember(app->agent_path);
   build_ui(app);
   return app;
 }
