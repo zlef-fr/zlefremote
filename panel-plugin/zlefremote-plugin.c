@@ -23,12 +23,38 @@ static gboolean reposition_idle(gpointer data);
 /* ── panel icon ───────────────────────────────────────────────────────────*/
 
 static void set_icon(PluginCtx *ctx, gint size) {
+  gint px = size > 16 ? size - 6 : size;
+
+  /* Load our bundled PNG straight from disk. PNG decoding is built into
+   * gdk-pixbuf, so the panel button always renders — independent of the icon
+   * cache, the active icon theme, and (crucially) the host's SVG loader.
+   *
+   * We deliberately do NOT go through the icon theme here: for a non-exact size
+   * GTK prefers a *scalable* (SVG) icon over our fixed-size PNGs, which would
+   * re-invoke the SVG loader. On hosts where that loader is missing or broken
+   * (e.g. a flaky librsvg/glycin) that leaves a broken icon — or crashes the
+   * plugin wrapper when GTK then can't load its own SVG image-missing icon. */
+  static const char *png[] = {
+    "/usr/share/icons/hicolor/64x64/apps/zlefremote.png",
+    "/usr/share/icons/hicolor/48x48/apps/zlefremote.png",
+    "/usr/local/share/icons/hicolor/64x64/apps/zlefremote.png",
+    "/usr/local/share/icons/hicolor/48x48/apps/zlefremote.png", NULL };
+  for (int i = 0; png[i]; i++) {
+    GdkPixbuf *pb = gdk_pixbuf_new_from_file_at_size(png[i], px, px, NULL);
+    if (pb) {
+      gtk_image_set_from_pixbuf(GTK_IMAGE(ctx->icon), pb);
+      g_object_unref(pb);
+      gtk_image_set_pixel_size(GTK_IMAGE(ctx->icon), px);
+      return;
+    }
+  }
+
+  /* PNGs not found (unusual install) — fall back to the themed icon by name */
   GtkIconTheme *theme = gtk_icon_theme_get_default();
   const char *name = gtk_icon_theme_has_icon(theme, "zlefremote")
                        ? "zlefremote" : "input-tablet";
   gtk_image_set_from_icon_name(GTK_IMAGE(ctx->icon), name, GTK_ICON_SIZE_BUTTON);
-  gtk_image_set_pixel_size(GTK_IMAGE(ctx->icon),
-                           size > 16 ? size - 6 : size);
+  gtk_image_set_pixel_size(GTK_IMAGE(ctx->icon), px);
 }
 
 static void on_status(ZrStatus st, gpointer data) {

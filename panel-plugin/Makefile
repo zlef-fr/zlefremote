@@ -51,13 +51,16 @@ install: $(PLUGIN_SO)
 	install -m 0755 $(PLUGIN_SO) $(DESTDIR)$(PLUGIN_DIR)/$(PLUGIN_SO)
 	install -d $(DESTDIR)$(DESKTOP_DIR)
 	install -m 0644 zlefremote.desktop.in $(DESTDIR)$(DESKTOP_DIR)/zlefremote.desktop
-	install -d $(DESTDIR)$(ICON_DIR)
-	install -m 0644 icons/zlefremote.svg $(DESTDIR)$(ICON_DIR)/zlefremote.svg
+	# install the whole hicolor tree (PNG sizes + scalable SVG). PNGs make the
+	# panel icon render without an external SVG loader (librsvg/glycin).
+	cd icons/hicolor && find . -type f | while read -r f; do \
+	  install -Dm644 "$$f" "$(DESTDIR)$(DATADIR)/icons/hicolor/$$f"; done
 	-gtk-update-icon-cache -f -t $(DESTDIR)$(DATADIR)/icons/hicolor 2>/dev/null || true
 
 uninstall:
 	rm -f $(DESTDIR)$(PLUGIN_DIR)/$(PLUGIN_SO)
 	rm -f $(DESTDIR)$(DESKTOP_DIR)/zlefremote.desktop
+	rm -f $(DESTDIR)$(DATADIR)/icons/hicolor/*/apps/zlefremote.png
 	rm -f $(DESTDIR)$(ICON_DIR)/zlefremote.svg
 
 clean:

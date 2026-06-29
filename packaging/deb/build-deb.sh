@@ -24,14 +24,15 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 plugdir="$stage/usr/lib/x86_64-linux-gnu/xfce4/panel/plugins"
 deskdir="$stage/usr/share/xfce4/panel/plugins"
-icondir="$stage/usr/share/icons/hicolor/scalable/apps"
+icondir="$stage/usr/share/icons/hicolor"
 agentdir="$stage/usr/lib/zlefremote"
 docdir="$stage/usr/share/doc/zlefremote-xfce-plugin"
 mkdir -p "$plugdir" "$deskdir" "$icondir" "$agentdir" "$docdir" "$stage/DEBIAN"
 
 install -m644 "$PLUGIN/libzlefremote.so"      "$plugdir/libzlefremote.so"
 install -m644 "$PLUGIN/zlefremote.desktop.in" "$deskdir/zlefremote.desktop"
-install -m644 "$PLUGIN/icons/zlefremote.svg"  "$icondir/zlefremote.svg"
+# full hicolor tree: PNG sizes (render with no SVG loader) + scalable SVG
+( cd "$PLUGIN/icons/hicolor" && find . -type f -exec install -Dm644 '{}' "$icondir/{}" \; )
 install -m755 "$AGENT"                         "$agentdir/zlefremote-agent"
 install -m644 "$PLUGIN/README.md"              "$docdir/README.md"
 
