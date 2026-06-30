@@ -57,7 +57,7 @@ const ZRConn = (() => {
       switch (msg.t) {
         case 'joined': afterLink(); break;
         case 'data':
-          try { emit('cmd', await ZRCrypto.open(msg.payload)); } catch {}
+          try { emit('cmd', await ZRCrypto.open(msg.payload)); } catch (e) { console.warn('frame decrypt failed:', e.message); }
           break;
         case 'closed': setState('closed'); emit('closed', msg.reason); break;
         case 'error': setState('error'); emit('error', msg.error); break;
