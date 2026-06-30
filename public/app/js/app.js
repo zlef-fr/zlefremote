@@ -217,7 +217,14 @@
   MEDIA.forEach(([ic, label, k]) => {
     const b = document.createElement('button');
     b.className = 'mediakey';
-    b.innerHTML = `<span class="mk-ic">${ZRIcon.svg(ic)}</span><span class="mk-l">${label}</span>`;
+    const icSpan = document.createElement('span');
+    icSpan.className = 'mk-ic';
+    icSpan.innerHTML = ZRIcon.svg(ic); // icon name is a hardcoded constant above
+    const lblSpan = document.createElement('span');
+    lblSpan.className = 'mk-l';
+    lblSpan.textContent = label;
+    b.appendChild(icSpan);
+    b.appendChild(lblSpan);
     b.addEventListener('click', () => { send({ t: 'media', k }); vibrate(10); });
     mg.appendChild(b);
   });
