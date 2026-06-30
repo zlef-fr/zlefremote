@@ -73,6 +73,18 @@ The derivation is one-way, so the room reveals nothing about the key and is
 never sent to any server; only a device that already holds the key (i.e. yours)
 can compute it.
 
+### Lock-screen media controls (opt-in)
+
+A web app can't draw *over* the Android lock screen (that needs a native
+`showWhenLocked` activity), but it can put a **media card** there. Enable
+**Settings → Lock-screen controls** and, while a session is connected, your
+phone's lock screen and notification shade show a "ZlefRemote" card whose
+play / prev / next (and seek = volume) buttons drive the connected computer's
+media keys — pause or skip the computer's music from the lock screen without
+unlocking. It's implemented with the Media Session API over an inaudible audio
+holder; off by default because holding an audio session pauses media playing on
+the phone itself.
+
 The agent checks `https://remote.zlef.fr/api/agent/version` for a newer build on
 startup (a one-line stderr hint; disable with `-no-update-check`). `-update`
 downloads the build for your OS/arch, verifies its SHA-256, and atomically

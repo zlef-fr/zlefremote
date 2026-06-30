@@ -44,6 +44,9 @@
   // ── command sender ─────────────────────────────────────────────────────
   const send = (cmd) => { if (paired) ZRConn.send(cmd); };
 
+  // lock-screen media card (Media Session API) — drives the PC's media keys
+  ZRMedia.config({ send, t });
+
   // ── connection state machine ───────────────────────────────────────────
   const ov = $('overlay'), ovTitle = $('ovTitle'), ovText = $('ovText'),
         ovBtn = $('ovBtn'), ovHome = $('ovHome'), ovSpin = $('ovSpin'), ovIcon = $('ovIcon'),
@@ -81,12 +84,12 @@
       const msg = e === 'no_such_room' ? t('err_room') : e === 'room_full' ? t('err_full') : t('err_connect');
       showOverlay('', msg, { icon: 'warn', btn: t('reconnect'), onClick: () => location.reload(), home: true });
     }
-    setStatus(t('closed'), 'bad'); paired = false;
+    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop();
   });
   ZRConn.on('closed', (reason) => {
     showOverlay('', reason === 'host_left' ? t('closed_host') : t('closed'),
       { icon: 'plug', btn: t('reconnect'), onClick: () => location.reload(), home: true });
-    setStatus(t('closed'), 'bad'); paired = false;
+    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop();
   });
 
   // host → client commands (the welcome handshake)
@@ -97,6 +100,7 @@
       setStatus(t('paired'), 'ok');
       $('hostName').textContent = c.name || '';
       vibrate(20);
+      ZRMedia.start(c.name || '');
       // remember persistent computers so they reconnect from Home in one tap
       if (ZRConn.isPersistent()) {
         ZRHome.saveFromWelcome({
@@ -225,6 +229,15 @@
   $('sens').addEventListener('input', (e) => { cfg.sensitivity = parseFloat(e.target.value); localStorage.setItem('zr_sens', e.target.value); });
   $('scrollSp').addEventListener('input', (e) => { cfg.scrollSpeed = parseFloat(e.target.value); localStorage.setItem('zr_scroll', e.target.value); });
   $('natural').addEventListener('change', (e) => { cfg.natural = e.target.checked; localStorage.setItem('zr_natural', e.target.checked ? '1' : '0'); });
+
+  // lock-screen controls toggle — only shown where the browser supports it
+  if (ZRMedia.supported()) {
+    $('lockctlRow').hidden = false;
+    $('lblLockctl').textContent = t('lockctl');
+    $('lockctlNote').textContent = t('lockctl_note');
+    $('lockctl').checked = ZRMedia.enabled();
+    $('lockctl').addEventListener('change', (e) => { ZRMedia.setEnabled(e.target.checked); });
+  }
 
   // keep the screen awake while controlling
   let wakeLock = null;
