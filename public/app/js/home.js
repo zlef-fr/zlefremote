@@ -225,10 +225,35 @@ const ZRHome = (() => {
     window.addEventListener('appinstalled', () => { b.hidden = true; });
   }
 
+  // ── lock-screen controls promo card ───────────────────────────────────────
+  // Surfaced on Home so the feature is discoverable without first connecting.
+  // The toggle just persists the preference (via ZRMedia); it takes effect the
+  // next time you connect to a computer.
+  function setupLockCard() {
+    const card = $('lockCard');
+    if (!card || typeof ZRMedia === 'undefined' || !ZRMedia.supported()) return;
+    $('lcIcon').innerHTML = ZRIcon.svg('lock', 1.2);
+    $('lcTitle').textContent = t('lockctl');
+    $('lcDesc').textContent = t('lockctl_home');
+    const tog = $('lcToggle');
+    const sync = (on) => {
+      tog.setAttribute('aria-checked', on ? 'true' : 'false');
+      card.classList.toggle('on', on);
+    };
+    sync(ZRMedia.enabled());
+    tog.addEventListener('click', () => {
+      const on = tog.getAttribute('aria-checked') !== 'true';
+      ZRMedia.setEnabled(on);
+      sync(on);
+    });
+    card.hidden = false;
+  }
+
   function init() {
     wireAdd();
     render();
     setupInstall();
+    setupLockCard();
     // PWA shortcut / deep link: /r/?add=1 opens the add sheet straight away
     if (/[?&]add=1\b/.test(location.search)) openAdd();
   }

@@ -22,6 +22,7 @@ const ZRI18n = (() => {
       reconnect: 'Reconnect', settings: 'Settings', sensitivity: 'Pointer speed',
       scroll_speed: 'Scroll speed', natural_scroll: 'Natural scrolling', close: 'Close',
       lockctl: 'Lock-screen controls',
+      lockctl_home: 'Pause & skip the computer’s media from your phone’s lock screen — without unlocking.',
       lockctl_note: 'Show a media card on your lock screen to drive the computer’s media keys. Note: it pauses music playing on the phone itself.',
       // home / saved devices
       home_title: 'Your devices', home_sub: 'Tap a computer to take control.',
@@ -60,6 +61,7 @@ const ZRI18n = (() => {
       reconnect: 'Reconnecter', settings: 'Réglages', sensitivity: 'Vitesse du pointeur',
       scroll_speed: 'Vitesse de défilement', natural_scroll: 'Défilement naturel', close: 'Fermer',
       lockctl: 'Contrôles sur l’écran verrouillé',
+      lockctl_home: 'Mettez en pause et passez les médias de l’ordinateur depuis l’écran verrouillé du téléphone — sans le déverrouiller.',
       lockctl_note: 'Affiche une carte média sur votre écran verrouillé pour piloter les touches média de l’ordinateur. Note : la musique jouée sur le téléphone est mise en pause.',
       // accueil / appareils enregistrés
       home_title: 'Vos appareils', home_sub: 'Touchez un ordinateur pour le contrôler.',
