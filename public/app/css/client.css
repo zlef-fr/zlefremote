@@ -118,7 +118,10 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 .sheet-head h3 { margin: 0; font-size: 19px; }
 .setrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--zl-line); font-size: 15px; color: var(--zl-text-soft); }
 .setrow input[type=range] { flex: 1; max-width: 60%; accent-color: var(--zl-olive-soft); }
-.setrow.switch input { width: 22px; height: 22px; accent-color: var(--zl-olive-soft); }
+.setrow.switch input { width: 22px; height: 22px; accent-color: var(--zl-olive-soft); flex: none; }
+.setrow.switch.col { align-items: flex-start; }
+.setrow .setrow-main { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.setrow .setrow-note { font-size: 12px; line-height: 1.35; color: var(--zl-text-muted); }
 .sheet-foot { padding-top: 14px; text-align: center; }
 .secure-note { font-size: 13px; color: var(--zl-text-muted); }
 

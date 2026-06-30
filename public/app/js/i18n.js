@@ -21,6 +21,8 @@ const ZRI18n = (() => {
       vol_down: 'Vol −', vol_up: 'Vol +', mute: 'Mute', play: 'Play/Pause', prev: 'Prev', next: 'Next',
       reconnect: 'Reconnect', settings: 'Settings', sensitivity: 'Pointer speed',
       scroll_speed: 'Scroll speed', natural_scroll: 'Natural scrolling', close: 'Close',
+      lockctl: 'Lock-screen controls',
+      lockctl_note: 'Show a media card on your lock screen to drive the computer’s media keys. Note: it pauses music playing on the phone itself.',
       // home / saved devices
       home_title: 'Your devices', home_sub: 'Tap a computer to take control.',
       saved: 'Saved devices', add_device: 'Add a device', connect: 'Connect',
@@ -57,6 +59,8 @@ const ZRI18n = (() => {
       vol_down: 'Vol −', vol_up: 'Vol +', mute: 'Muet', play: 'Lecture/Pause', prev: 'Préc.', next: 'Suiv.',
       reconnect: 'Reconnecter', settings: 'Réglages', sensitivity: 'Vitesse du pointeur',
       scroll_speed: 'Vitesse de défilement', natural_scroll: 'Défilement naturel', close: 'Fermer',
+      lockctl: 'Contrôles sur l’écran verrouillé',
+      lockctl_note: 'Affiche une carte média sur votre écran verrouillé pour piloter les touches média de l’ordinateur. Note : la musique jouée sur le téléphone est mise en pause.',
       // accueil / appareils enregistrés
       home_title: 'Vos appareils', home_sub: 'Touchez un ordinateur pour le contrôler.',
       saved: 'Appareils enregistrés', add_device: 'Ajouter un appareil', connect: 'Connecter',

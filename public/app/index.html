@@ -105,6 +105,7 @@
     <label class="setrow"><span id="lblSens"></span><input type="range" id="sens" min="0.6" max="3.2" step="0.1" value="1.6"></label>
     <label class="setrow"><span id="lblScroll"></span><input type="range" id="scrollSp" min="0.3" max="2.5" step="0.1" value="1.0"></label>
     <label class="setrow switch"><span id="lblNatural"></span><input type="checkbox" id="natural" checked></label>
+    <label class="setrow switch col" id="lockctlRow" hidden><span class="setrow-main"><span id="lblLockctl"></span><small class="setrow-note" id="lockctlNote"></small></span><input type="checkbox" id="lockctl"></label>
     <div class="sheet-foot"><span class="secure-note" id="secureNote"></span></div>
   </div>
 </div>
@@ -134,7 +135,8 @@
 <script src="/app/js/conn.js?v=2"></script>
 <script src="/app/js/input.js?v=1"></script>
 <script src="/app/js/home.js?v=2"></script>
-<script src="/app/js/app.js?v=3"></script>
+<script src="/app/js/media-session.js?v=1"></script>
+<script src="/app/js/app.js?v=4"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
