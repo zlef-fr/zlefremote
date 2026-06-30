@@ -2,10 +2,12 @@
   "name": "zlefremote",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "ZlefRemote — control your computer's mouse & keyboard from your phone, over LAN or end-to-end-encrypted through remote.zlef.fr",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/rooms.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
