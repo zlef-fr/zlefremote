@@ -19,7 +19,10 @@ const ZRIcon = (() => {
   }
   // hydrate any <span data-ico="name"> already in the DOM
   function hydrate(root = document) {
-    root.querySelectorAll('[data-ico]').forEach((el) => { el.innerHTML = svg(el.dataset.ico); });
+    root.querySelectorAll('[data-ico]').forEach((el) => {
+      const name = el.dataset.ico;
+      if (P[name]) el.innerHTML = svg(name); // only inject HTML for known static icon names
+    });
   }
   return { svg, hydrate };
 })();
