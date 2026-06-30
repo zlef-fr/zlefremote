@@ -13,6 +13,28 @@ const PUBLIC_HOST = process.env.PUBLIC_HOST || 'remote.zlef.fr';
 const ROOT = __dirname;
 const MAX_FRAME = 64 * 1024; // 64 KB ceiling per relayed frame
 
+const SEC_HEADERS = {
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  // allow external CDN assets this app actually loads:
+  //   da.zlef.fr      → design-system CSS / fonts
+  //   assets.zlef.fr  → favicons, analytics
+  //   installkit.zlef.fr → per-device PWA install guidance (app shell only)
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self' https://assets.zlef.fr https://installkit.zlef.fr",
+    "style-src 'self' https://da.zlef.fr",
+    "img-src 'self' data: https://assets.zlef.fr",
+    "connect-src 'self'",
+    "font-src 'self' https://da.zlef.fr",
+    "worker-src 'self'",
+    "media-src blob:",
+    "frame-ancestors 'none'",
+  ].join('; '),
+};
+
 const rooms = new Rooms();
 let agentPings = 0;
 
@@ -49,7 +71,10 @@ function fileSha(file) {
 }
 
 function send(res, code, body, type, extra) {
-  res.writeHead(code, Object.assign({ 'Content-Type': type || 'text/plain; charset=utf-8' }, extra || {}));
+  const ct = type || 'text/plain; charset=utf-8';
+  const isHtml = ct.startsWith('text/html') || ct.startsWith('text/javascript') || ct.startsWith('application/');
+  const secBase = isHtml ? SEC_HEADERS : {};
+  res.writeHead(code, Object.assign({ 'Content-Type': ct }, secBase, extra || {}));
   res.end(body);
 }
 
@@ -79,7 +104,7 @@ const server = http.createServer((req, res) => {
         const d = JSON.parse(body || '{}');
         agentPings++;
         console.log(`agent ping #${agentPings} v=${String(d.version).slice(0, 16)} os=${String(d.os).slice(0, 12)}/${String(d.arch).slice(0, 12)} mode=${String(d.mode).slice(0, 8)}`);
-      } catch {}
+      } catch (e) { console.error('agent ping parse error:', e.message); }
       res.writeHead(204); res.end();
     });
     return;
