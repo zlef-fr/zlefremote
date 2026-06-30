@@ -1,7 +1,7 @@
 (() => {
   const t = ZRI18n.t;
   const $ = (id) => document.getElementById(id);
-  const vibrate = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+  const vibrate = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch { /* Vibration API not available on this device/browser */ } };
 
   // settings (persisted per device)
   const cfg = {
@@ -217,7 +217,14 @@
   MEDIA.forEach(([ic, label, k]) => {
     const b = document.createElement('button');
     b.className = 'mediakey';
-    b.innerHTML = `<span class="mk-ic">${ZRIcon.svg(ic)}</span><span class="mk-l">${label}</span>`;
+    const icSpan = document.createElement('span');
+    icSpan.className = 'mk-ic';
+    icSpan.innerHTML = ZRIcon.svg(ic); // static SVG path constant only
+    const lSpan = document.createElement('span');
+    lSpan.className = 'mk-l';
+    lSpan.textContent = label;
+    b.appendChild(icSpan);
+    b.appendChild(lSpan);
     b.addEventListener('click', () => { send({ t: 'media', k }); vibrate(10); });
     mg.appendChild(b);
   });
@@ -241,7 +248,7 @@
 
   // keep the screen awake while controlling
   let wakeLock = null;
-  async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
+  async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch { /* Screen Wake Lock denied or not supported; screen may sleep */ } }
 
   // ── mode routing: home (device picker) vs control ──────────────────────────
   $('homeBtn').addEventListener('click', goHome);

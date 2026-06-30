@@ -59,7 +59,7 @@ const ZRMedia = (() => {
   function tryPlay() {
     const a = ensureAudio();
     const pr = a.play();
-    if (pr && pr.then) pr.then(() => { primed = true; }).catch(() => {/* needs a gesture */});
+    if (pr && pr.then) pr.then(() => { primed = true; }).catch(() => { /* autoplay blocked — will retry on first user gesture */ });
   }
 
   // Browsers gate audio start on a user gesture. Catch the first interaction in
@@ -99,10 +99,10 @@ const ZRMedia = (() => {
   // toggle of our silent holder stream.
   function setHandlers() {
     if (!SUPPORTED) return;
-    const fire = (k) => { try { send({ t: 'media', k }); } catch {} };
+    const fire = (k) => { try { send({ t: 'media', k }); } catch { /* connection may have dropped between lock-screen tap and send */ } };
     const keep = () => { navigator.mediaSession.playbackState = 'playing'; };
     const set = (action, fn) => {
-      try { navigator.mediaSession.setActionHandler(action, fn); } catch {}
+      try { navigator.mediaSession.setActionHandler(action, fn); } catch { /* action not supported by this browser/OS */ }
     };
     set('play', () => { fire('playpause'); tryPlay(); keep(); });
     set('pause', () => { fire('playpause'); tryPlay(); keep(); });
@@ -116,7 +116,7 @@ const ZRMedia = (() => {
   function clearHandlers() {
     if (!SUPPORTED) return;
     for (const a of ['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward']) {
-      try { navigator.mediaSession.setActionHandler(a, null); } catch {}
+      try { navigator.mediaSession.setActionHandler(a, null); } catch { /* action may not be supported; ignore */ }
     }
   }
 
@@ -134,8 +134,8 @@ const ZRMedia = (() => {
   function stop() {
     active = false;
     clearHandlers();
-    if (SUPPORTED) { try { navigator.mediaSession.playbackState = 'none'; navigator.mediaSession.metadata = null; } catch {} }
-    if (audio) { try { audio.pause(); } catch {} }
+    if (SUPPORTED) { try { navigator.mediaSession.playbackState = 'none'; navigator.mediaSession.metadata = null; } catch { /* ignore */ } }
+    if (audio) { try { audio.pause(); } catch { /* ignore */ } }
   }
 
   // Settings toggle flips the feature live during a session.

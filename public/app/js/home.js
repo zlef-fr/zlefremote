@@ -14,7 +14,7 @@ const ZRHome = (() => {
   // ── store ────────────────────────────────────────────────────────────────
   function load() {
     try { const a = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(a) ? a : []; }
-    catch { return []; }
+    catch { return []; } // corrupted localStorage entry — start fresh
   }
   function save(list) { localStorage.setItem(KEY, JSON.stringify(list)); }
   function list() { return load().sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0)); }
@@ -55,7 +55,7 @@ const ZRHome = (() => {
   async function connectTo(dev) {
     let room = dev.room;
     if (dev.persistent && dev.key) {
-      try { room = await ZRCrypto.deriveRoom(dev.key); } catch {}
+      try { room = await ZRCrypto.deriveRoom(dev.key); } catch { /* bad key in storage — fall back to stored room code */ }
     }
     touchById(devId(dev));
     location.href = `/r/${room}#k=${dev.key}` + (dev.persistent ? '&p=1' : '');
@@ -75,8 +75,14 @@ const ZRHome = (() => {
     if (!devs.length) {
       const e = document.createElement('div');
       e.className = 'dev-empty';
-      e.innerHTML = `<div class="empty-ic">${ZRIcon.svg('cursor', 1.4)}</div>
-        <h2>${t('empty_title')}</h2><p>${t('empty_sub')}</p>`;
+      const ic = document.createElement('div');
+      ic.className = 'empty-ic';
+      ic.innerHTML = ZRIcon.svg('cursor', 1.4); // static SVG path only
+      const h2 = document.createElement('h2');
+      h2.textContent = t('empty_title');
+      const p = document.createElement('p');
+      p.textContent = t('empty_sub');
+      e.appendChild(ic); e.appendChild(h2); e.appendChild(p);
       wrap.appendChild(e);
     }
 
@@ -84,35 +90,76 @@ const ZRHome = (() => {
       const id = devId(d);
       const card = document.createElement('div');
       card.className = 'devcard reveal-in';
-      card.innerHTML = `
-        <button class="devmain" aria-label="${t('connect')}">
-          <span class="dev-av">${osGlyph(d.os)}</span>
-          <span class="dev-meta">
-            <span class="dev-name"></span>
-            <span class="dev-sub">${d.lastUsed ? t('last_used') + ' · ' + timeAgo(d.lastUsed) : ''}</span>
-          </span>
-          <span class="dev-go">${ZRIcon.svg('cursor', 1.5)}</span>
-        </button>
-        <button class="dev-more" aria-label="${t('settings')}">⋯</button>
-        <div class="dev-menu" hidden>
-          <button data-act="rename">${t('rename')}</button>
-          <button data-act="remove" class="danger">${t('remove')}</button>
-        </div>`;
-      card.querySelector('.dev-name').textContent = d.name || t('unknown_device');
 
-      card.querySelector('.devmain').addEventListener('click', () => connectTo(d));
-      const menu = card.querySelector('.dev-menu');
-      card.querySelector('.dev-more').addEventListener('click', (ev) => {
+      // Main connect button — built with DOM methods so user-derived values
+      // (name, os, lastUsed) are always set as text, never injected as HTML.
+      const mainBtn = document.createElement('button');
+      mainBtn.className = 'devmain';
+      mainBtn.setAttribute('aria-label', t('connect'));
+
+      const avSpan = document.createElement('span');
+      avSpan.className = 'dev-av';
+      avSpan.textContent = osGlyph(d.os);
+
+      const metaSpan = document.createElement('span');
+      metaSpan.className = 'dev-meta';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'dev-name';
+      nameSpan.textContent = d.name || t('unknown_device');
+
+      const subSpan = document.createElement('span');
+      subSpan.className = 'dev-sub';
+      subSpan.textContent = d.lastUsed ? t('last_used') + ' · ' + timeAgo(d.lastUsed) : '';
+
+      metaSpan.appendChild(nameSpan);
+      metaSpan.appendChild(subSpan);
+
+      const goSpan = document.createElement('span');
+      goSpan.className = 'dev-go';
+      goSpan.innerHTML = ZRIcon.svg('cursor', 1.5); // static SVG path only
+
+      mainBtn.appendChild(avSpan);
+      mainBtn.appendChild(metaSpan);
+      mainBtn.appendChild(goSpan);
+
+      const moreBtn = document.createElement('button');
+      moreBtn.className = 'dev-more';
+      moreBtn.setAttribute('aria-label', t('settings'));
+      moreBtn.textContent = '⋯';
+
+      const menu = document.createElement('div');
+      menu.className = 'dev-menu';
+      menu.hidden = true;
+
+      const renameBtn = document.createElement('button');
+      renameBtn.dataset.act = 'rename';
+      renameBtn.textContent = t('rename');
+
+      const removeBtn = document.createElement('button');
+      removeBtn.dataset.act = 'remove';
+      removeBtn.className = 'danger';
+      removeBtn.textContent = t('remove');
+
+      menu.appendChild(renameBtn);
+      menu.appendChild(removeBtn);
+
+      card.appendChild(mainBtn);
+      card.appendChild(moreBtn);
+      card.appendChild(menu);
+
+      mainBtn.addEventListener('click', () => connectTo(d));
+      moreBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         const wasOpen = !menu.hidden;
         document.querySelectorAll('.dev-menu').forEach((m) => (m.hidden = true));
         menu.hidden = wasOpen;
       });
-      menu.querySelector('[data-act="rename"]').addEventListener('click', () => {
+      renameBtn.addEventListener('click', () => {
         const name = prompt(t('rename_ph'), d.name || '');
         if (name != null && name.trim()) { renameById(id, name.trim()); render(); }
       });
-      menu.querySelector('[data-act="remove"]').addEventListener('click', () => {
+      removeBtn.addEventListener('click', () => {
         if (confirm(t('remove_q'))) { removeById(id); render(); }
       });
       wrap.appendChild(card);
@@ -154,7 +201,7 @@ const ZRHome = (() => {
 
   async function go(target) {
     let room = target.room;
-    if (!room && target.persistent) { try { room = await ZRCrypto.deriveRoom(target.key); } catch {} }
+    if (!room && target.persistent) { try { room = await ZRCrypto.deriveRoom(target.key); } catch { /* bad key — fall through to showErr below */ } }
     if (!room) { showErr(t('add_bad')); return; }
     location.href = `/r/${room}#k=${target.key}` + (target.persistent ? '&p=1' : '');
   }
@@ -177,7 +224,7 @@ const ZRHome = (() => {
           const target = parseLink(c.rawValue || '');
           if (target) { stopScan(); return go(target); }
         }
-      } catch {}
+      } catch { /* BarcodeDetector may throw on certain frames; keep scanning */ }
       scanRAF = requestAnimationFrame(tick);
     };
     tick();
@@ -217,11 +264,11 @@ const ZRHome = (() => {
     const standalone = (matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
     if (standalone) return; // already installed → no prompt
     b.textContent = t('install_app');
-    b.onclick = () => { try { window.InstallKit && window.InstallKit.open(); } catch {} };
-    const reveal = () => { try { if (window.InstallKit && window.InstallKit.canInstall()) b.hidden = false; } catch {} };
+    b.onclick = () => { try { window.InstallKit && window.InstallKit.open(); } catch { /* InstallKit not yet loaded */ } };
+    const reveal = () => { try { if (window.InstallKit && window.InstallKit.canInstall()) b.hidden = false; } catch { /* InstallKit not yet loaded */ } };
     reveal();
     setTimeout(reveal, 900); // InstallKit boots async (deferred script)
-    try { window.InstallKit && window.InstallKit.on && window.InstallKit.on('available', reveal); } catch {}
+    try { window.InstallKit && window.InstallKit.on && window.InstallKit.on('available', reveal); } catch { /* InstallKit not yet loaded */ }
     window.addEventListener('appinstalled', () => { b.hidden = true; });
   }
 

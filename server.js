@@ -5,13 +5,33 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { Rooms } = require('./lib/rooms');
-const { landing, startPage, privacyPage } = require('./lib/pages');
+const { landing, startPage, privacyPage, legalPage } = require('./lib/pages');
 const { pickLang } = require('./lib/i18n');
 
 const PORT = parseInt(process.env.PORT || '10067', 10);
 const PUBLIC_HOST = process.env.PUBLIC_HOST || 'remote.zlef.fr';
 const ROOT = __dirname;
 const MAX_FRAME = 64 * 1024; // 64 KB ceiling per relayed frame
+
+// Defence-in-depth headers sent on every HTTP response.
+const SECURE_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
+  'Content-Security-Policy': [
+    "default-src 'none'",
+    "script-src 'self' https://assets.zlef.fr",
+    "style-src 'self' https://da.zlef.fr",
+    "img-src 'self' data: https:",
+    "connect-src 'self' wss: https:",
+    "font-src https:",
+    "manifest-src 'self' https://assets.zlef.fr",
+    "worker-src 'self'",
+    "media-src blob:",
+    "frame-ancestors 'none'",
+  ].join('; '),
+};
 
 const rooms = new Rooms();
 let agentPings = 0;
@@ -25,7 +45,7 @@ const MIME = {
 
 function distHave() {
   try { return new Set(fs.readdirSync(path.join(ROOT, 'dist'))); }
-  catch { return new Set(); }
+  catch { return new Set(); } // dist/ may not exist in dev; that's fine
 }
 
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
@@ -45,11 +65,14 @@ function fileSha(file) {
     const sha = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
     _shaCache.set(file, { mtimeMs: st.mtimeMs, size: st.size, sha });
     return sha;
-  } catch { return null; }
+  } catch (e) {
+    console.error('fileSha error for', file, ':', e.message);
+    return null;
+  }
 }
 
 function send(res, code, body, type, extra) {
-  res.writeHead(code, Object.assign({ 'Content-Type': type || 'text/plain; charset=utf-8' }, extra || {}));
+  res.writeHead(code, Object.assign({}, SECURE_HEADERS, { 'Content-Type': type || 'text/plain; charset=utf-8' }, extra || {}));
   res.end(body);
 }
 
@@ -78,8 +101,12 @@ const server = http.createServer((req, res) => {
       try {
         const d = JSON.parse(body || '{}');
         agentPings++;
-        console.log(`agent ping #${agentPings} v=${String(d.version).slice(0, 16)} os=${String(d.os).slice(0, 12)}/${String(d.arch).slice(0, 12)} mode=${String(d.mode).slice(0, 8)}`);
-      } catch {}
+        // Strip newlines and control chars to prevent log injection.
+        const safe = (v, n) => String(v).replace(/[\x00-\x1f\x7f]/g, '').slice(0, n);
+        console.log(`agent ping #${agentPings} v=${safe(d.version, 16)} os=${safe(d.os, 12)}/${safe(d.arch, 12)} mode=${safe(d.mode, 8)}`);
+      } catch (e) {
+        console.error('agent ping parse error:', e.message);
+      }
       res.writeHead(204); res.end();
     });
     return;
@@ -101,6 +128,12 @@ const server = http.createServer((req, res) => {
   if (p === '/privacy') {
     const lang = pickLang(req);
     return send(res, 200, privacyPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  }
+
+  // /legal — legal notice / mentions légales (LCEN Art. 6)
+  if (p === '/legal') {
+    const lang = pickLang(req);
+    return send(res, 200, legalPage(lang), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
   // relay client app — /r (home/device picker), /r/ and /r/<room> serve the
@@ -180,7 +213,7 @@ wss.on('connection', (ws, req) => {
   // browser clients must come from our own origin; agents send no Origin header
   const origin = req.headers.origin;
   if (origin && origin !== `https://${PUBLIC_HOST}` && !/^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.)/.test(origin)) {
-    try { ws.close(1008, 'origin'); } catch {} return;
+    try { ws.close(1008, 'origin'); } catch { /* ignore close errors on rejected sockets */ } return;
   }
   ws._ip = clientIp(req);
   ws._t0 = Date.now();
@@ -222,9 +255,9 @@ wss.on('connection', (ws, req) => {
 // keepalive: drop dead sockets
 setInterval(() => {
   for (const ws of wss.clients) {
-    if (ws._alive === false) { try { ws.terminate(); } catch {} continue; }
+    if (ws._alive === false) { try { ws.terminate(); } catch { /* ignore — socket already gone */ } continue; }
     ws._alive = false;
-    try { ws.ping(); } catch {}
+    try { ws.ping(); } catch { /* ignore — socket may have closed between check and ping */ }
   }
 }, 30000).unref?.();
 wss.on('connection', (ws) => { ws._alive = true; ws.on('pong', () => { ws._alive = true; }); });

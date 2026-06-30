@@ -57,7 +57,7 @@ const ZRConn = (() => {
       switch (msg.t) {
         case 'joined': afterLink(); break;
         case 'data':
-          try { emit('cmd', await ZRCrypto.open(msg.payload)); } catch {}
+          try { emit('cmd', await ZRCrypto.open(msg.payload)); } catch { /* decryption failure — bad key or corrupted frame, drop silently */ }
           break;
         case 'closed': setState('closed'); emit('closed', msg.reason); break;
         case 'error': setState('error'); emit('error', msg.error); break;
@@ -75,7 +75,7 @@ const ZRConn = (() => {
         setState('error'); emit('error', 'connect_failed');
       }
     };
-    ws.onerror = () => {};
+    ws.onerror = () => { /* errors surface as close events; handled in ws.onclose */ };
   }
 
   async function afterLink() {
@@ -92,9 +92,9 @@ const ZRConn = (() => {
 
   function markPaired() { setState('paired'); }
 
-  function close() { manualClose = true; clearTimeout(reconnectTimer); try { ws && ws.close(); } catch {} }
+  function close() { manualClose = true; clearTimeout(reconnectTimer); try { ws && ws.close(); } catch { /* ignore — socket may already be gone */ } }
 
-  setInterval(() => { if (ws && ws.readyState === 1) try { ws.send(JSON.stringify({ t: 'ping' })); } catch {} }, 25000);
+  setInterval(() => { if (ws && ws.readyState === 1) try { ws.send(JSON.stringify({ t: 'ping' })); } catch { /* ignore — socket closed between check and send */ } }, 25000);
 
   return {
     start, send, on, close, markPaired, hasTarget,
