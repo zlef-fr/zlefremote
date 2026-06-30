@@ -186,6 +186,31 @@ body.mode-home { overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
 .addbtn:active { background: rgba(157,174,80,.18); transform: translateY(1px); }
 .add-plus { font-size: 22px; line-height: 1; }
 
+/* lock-screen controls promo card */
+.lockcard { display: flex; align-items: center; gap: 14px; padding: 16px 16px;
+  border-radius: var(--zl-radius-lg); border: 1px solid var(--zl-line-strong);
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(157,174,80,.10), transparent 55%),
+    var(--zl-surface-1);
+  transition: border-color .2s, box-shadow .25s, background .2s; }
+.lockcard.on { border-color: rgba(157,174,80,.45); box-shadow: 0 0 0 1px rgba(157,174,80,.18), 0 8px 26px rgba(0,0,0,.28); }
+.lockcard[hidden] { display: none; }
+.lc-ic { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
+  color: var(--zl-accent-soft); background: var(--zl-accent-wash); border: 1px solid var(--zl-line);
+  transition: color .2s, background .2s; }
+.lc-ic svg { width: 24px; height: 24px; }
+.lockcard.on .lc-ic { color: var(--zl-on-accent); background: var(--zl-accent); border-color: var(--zl-olive-soft); }
+.lc-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.lc-title { font-size: 16px; font-weight: 700; color: var(--zl-text); }
+.lc-desc { font-size: 12.5px; line-height: 1.45; color: var(--zl-text-muted); }
+.lc-switch { flex: 0 0 auto; width: 50px; height: 30px; border-radius: 999px; padding: 0; position: relative;
+  background: var(--zl-surface-3); border: 1px solid var(--zl-line-strong); transition: background .2s, border-color .2s; }
+.lc-knob { position: absolute; top: 50%; left: 3px; transform: translateY(-50%); width: 24px; height: 24px;
+  border-radius: 50%; background: var(--zl-text-muted); transition: transform .2s var(--zl-ease, ease), background .2s; }
+.lc-switch[aria-checked="true"] { background: var(--zl-accent); border-color: var(--zl-olive-soft); }
+.lc-switch[aria-checked="true"] .lc-knob { transform: translate(20px, -50%); background: var(--zl-on-accent); }
+.lc-switch:active .lc-knob { width: 27px; }
+
 @keyframes reveal-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .reveal-in { animation: reveal-in .28s var(--zl-ease, ease) both; }
 

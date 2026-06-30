@@ -17,7 +17,7 @@
 <link rel="manifest" href="/app.webmanifest">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=4">
+<link rel="stylesheet" href="/app/css/client.css?v=5">
 <!-- InstallKit: accurate per-device "install this PWA" steps. mode=manual → no
      floating FAB; the home screen's Install button calls InstallKit.open(). -->
 <script defer src="https://installkit.zlef.fr/v1/install-kit.js"
@@ -51,6 +51,18 @@
   <button class="addbtn" id="addDevice">
     <span class="add-plus">＋</span><span id="addLabel"></span>
   </button>
+
+  <!-- lock-screen controls promo + toggle (only where MediaSession is supported) -->
+  <section class="lockcard reveal-in" id="lockCard" hidden>
+    <span class="lc-ic" id="lcIcon"></span>
+    <span class="lc-body">
+      <span class="lc-title" id="lcTitle"></span>
+      <span class="lc-desc" id="lcDesc"></span>
+    </span>
+    <button class="lc-switch" id="lcToggle" role="switch" aria-checked="false">
+      <span class="lc-knob"></span>
+    </button>
+  </section>
 </section>
 
 <!-- ░░ CONTROL ░░ -->
@@ -130,11 +142,11 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="/app/js/icons.js?v=2"></script>
-<script src="/app/js/i18n.js?v=2"></script>
+<script src="/app/js/i18n.js?v=3"></script>
 <script src="/app/js/crypto.js?v=2"></script>
 <script src="/app/js/conn.js?v=2"></script>
 <script src="/app/js/input.js?v=1"></script>
-<script src="/app/js/home.js?v=2"></script>
+<script src="/app/js/home.js?v=3"></script>
 <script src="/app/js/media-session.js?v=1"></script>
 <script src="/app/js/app.js?v=4"></script>
 <script>
