@@ -55,7 +55,7 @@ const ZRHome = (() => {
   async function connectTo(dev) {
     let room = dev.room;
     if (dev.persistent && dev.key) {
-      try { room = await ZRCrypto.deriveRoom(dev.key); } catch {}
+      try { room = await ZRCrypto.deriveRoom(dev.key); } catch (e) { console.warn('room derivation failed:', e.message); }
     }
     touchById(devId(dev));
     location.href = `/r/${room}#k=${dev.key}` + (dev.persistent ? '&p=1' : '');
@@ -86,10 +86,10 @@ const ZRHome = (() => {
       card.className = 'devcard reveal-in';
       card.innerHTML = `
         <button class="devmain" aria-label="${t('connect')}">
-          <span class="dev-av">${osGlyph(d.os)}</span>
+          <span class="dev-av"></span>
           <span class="dev-meta">
             <span class="dev-name"></span>
-            <span class="dev-sub">${d.lastUsed ? t('last_used') + ' · ' + timeAgo(d.lastUsed) : ''}</span>
+            <span class="dev-sub"></span>
           </span>
           <span class="dev-go">${ZRIcon.svg('cursor', 1.5)}</span>
         </button>
@@ -98,7 +98,9 @@ const ZRHome = (() => {
           <button data-act="rename">${t('rename')}</button>
           <button data-act="remove" class="danger">${t('remove')}</button>
         </div>`;
+      card.querySelector('.dev-av').textContent = osGlyph(d.os);
       card.querySelector('.dev-name').textContent = d.name || t('unknown_device');
+      card.querySelector('.dev-sub').textContent = d.lastUsed ? t('last_used') + ' · ' + timeAgo(d.lastUsed) : '';
 
       card.querySelector('.devmain').addEventListener('click', () => connectTo(d));
       const menu = card.querySelector('.dev-menu');
@@ -154,7 +156,7 @@ const ZRHome = (() => {
 
   async function go(target) {
     let room = target.room;
-    if (!room && target.persistent) { try { room = await ZRCrypto.deriveRoom(target.key); } catch {} }
+    if (!room && target.persistent) { try { room = await ZRCrypto.deriveRoom(target.key); } catch (e) { console.warn('room derivation failed:', e.message); } }
     if (!room) { showErr(t('add_bad')); return; }
     location.href = `/r/${room}#k=${target.key}` + (target.persistent ? '&p=1' : '');
   }
@@ -177,7 +179,7 @@ const ZRHome = (() => {
           const target = parseLink(c.rawValue || '');
           if (target) { stopScan(); return go(target); }
         }
-      } catch {}
+      } catch (e) { console.warn('QR detect error:', e.message); }
       scanRAF = requestAnimationFrame(tick);
     };
     tick();
