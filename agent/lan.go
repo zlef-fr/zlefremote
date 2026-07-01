@@ -50,7 +50,7 @@ func peerIP(r *http.Request) string {
 	return addr
 }
 
-func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
+func runLAN(sealer *Sealer, inj Injector, scr Screener, keyB64 string, port int) error {
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
 		return err
@@ -104,8 +104,17 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 		idMu.Unlock()
 		roster.Add(id, peerIP(r))
 		defer roster.Remove(id)
-		se := NewSession(sealer, inj)
 		ctx := context.Background()
+		// The screen-view stream pushes frames from a goroutine while the read
+		// loop may also reply — serialize writes to this phone's socket.
+		var wmu sync.Mutex
+		se := NewSession(sealer, inj, scr, func(payload string) {
+			out, _ := json.Marshal(frame{T: "data", Payload: payload})
+			wmu.Lock()
+			c.Write(ctx, websocket.MessageText, out)
+			wmu.Unlock()
+		})
+		defer se.Close()
 		for {
 			_, data, err := c.Read(ctx)
 			if err != nil {
@@ -115,10 +124,7 @@ func runLAN(sealer *Sealer, inj Injector, keyB64 string, port int) error {
 			if json.Unmarshal(data, &f) != nil || f.T != "data" {
 				continue
 			}
-			if reply := se.Handle(f.Payload); reply != "" {
-				out, _ := json.Marshal(frame{T: "data", Payload: reply})
-				c.Write(ctx, websocket.MessageText, out)
-			}
+			se.Handle(f.Payload)
 		}
 	})
 

@@ -29,6 +29,7 @@
   $('tlPad').textContent = t('tab_pad');
   $('tlKeys').textContent = t('tab_keys');
   $('tlMedia').textContent = t('tab_media');
+  $('tlScreen').textContent = t('tab_screen');
   $('bLeft').textContent = t('btn_left');
   $('bRight').textContent = t('btn_right');
   $('bMid').textContent = t('btn_mid');
@@ -46,6 +47,27 @@
 
   // lock-screen media card (Media Session API) — drives the PC's media keys
   ZRMedia.config({ send, t });
+
+  // ── live screen view ─────────────────────────────────────────────────────
+  ZRScreen._t = t;
+  ZRScreen.config({
+    send, canvas: $('screenCanvas'), hud: $('screenHud'),
+    msg: $('screenMsg'), stage: $('screenWrap'),
+  });
+  let screenHintShown = false;
+  const QS = [['low', t('q_low')], ['med', t('q_med')], ['high', t('q_high')]];
+  const qbar = $('qualBar');
+  QS.forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.className = 'qbtn' + (ZRScreen.getPreset() === k ? ' active' : '');
+    b.textContent = label; b.dataset.q = k;
+    b.addEventListener('click', () => {
+      ZRScreen.setPreset(k);
+      qbar.querySelectorAll('.qbtn').forEach((x) => x.classList.toggle('active', x.dataset.q === k));
+      vibrate(6);
+    });
+    qbar.appendChild(b);
+  });
 
   // ── connection state machine ───────────────────────────────────────────
   const ov = $('overlay'), ovTitle = $('ovTitle'), ovText = $('ovText'),
@@ -84,16 +106,18 @@
       const msg = e === 'no_such_room' ? t('err_room') : e === 'room_full' ? t('err_full') : t('err_connect');
       showOverlay('', msg, { icon: 'warn', btn: t('reconnect'), onClick: () => location.reload(), home: true });
     }
-    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop();
+    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop(); ZRScreen.stop();
   });
   ZRConn.on('closed', (reason) => {
     showOverlay('', reason === 'host_left' ? t('closed_host') : t('closed'),
       { icon: 'plug', btn: t('reconnect'), onClick: () => location.reload(), home: true });
-    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop();
+    setStatus(t('closed'), 'bad'); paired = false; ZRMedia.stop(); ZRScreen.stop();
   });
 
-  // host → client commands (the welcome handshake)
+  // host → client commands (the welcome handshake + live screen frames)
   ZRConn.on('cmd', (c) => {
+    if (c.t === 'f') { ZRScreen.onFrame(c); return; }
+    if (c.t === 'viewerr') { ZRScreen.onErr(c.reason); return; }
     if (c.t === 'welcome') {
       paired = true; ZRConn.markPaired();
       hideOverlay();
@@ -101,6 +125,11 @@
       $('hostName').textContent = c.name || '';
       vibrate(20);
       ZRMedia.start(c.name || '');
+      // reveal the Screen tab only if this computer's agent can capture it;
+      // resume the stream if the user is already on that tab (reconnect).
+      const canScreen = !!(c.cap && c.cap.screen);
+      $('tabScreen').hidden = !canScreen;
+      if (canScreen && currentView() === 'screen') ZRScreen.start();
       // remember persistent computers so they reconnect from Home in one tap
       if (ZRConn.isPersistent()) {
         ZRHome.saveFromWelcome({
@@ -130,7 +159,8 @@
   });
 
   // ── tabs ───────────────────────────────────────────────────────────────
-  const views = { pad: $('viewPad'), keys: $('viewKeys'), media: $('viewMedia') };
+  const views = { pad: $('viewPad'), keys: $('viewKeys'), media: $('viewMedia'), screen: $('viewScreen') };
+  const currentView = () => document.querySelector('.tab.active')?.dataset.view;
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
@@ -138,6 +168,13 @@
       const v = tab.dataset.view;
       for (const k in views) views[k].hidden = (k !== v);
       if (v === 'keys') setTimeout(() => $('typer').focus(), 60);
+      // start/stop the live screen stream as its tab gains/loses focus
+      if (v === 'screen') {
+        ZRScreen.setActive(true);
+        if (!screenHintShown) { screenHintShown = true; toast(t('screen_hint')); }
+      } else {
+        ZRScreen.stop();
+      }
     });
   });
 

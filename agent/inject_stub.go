@@ -19,6 +19,7 @@ func newInjector() Injector {
 }
 
 func (stubInjector) MoveRel(dx, dy int)             { log.Printf("[stub] move %+d,%+d", dx, dy) }
+func (stubInjector) MoveAbs(x, y int)               { log.Printf("[stub] moveabs %d,%d", x, y) }
 func (stubInjector) Click(b string, dbl bool)       { log.Printf("[stub] click %s dbl=%v", b, dbl) }
 func (stubInjector) Toggle(b string, down bool)     { log.Printf("[stub] toggle %s down=%v", b, down) }
 func (stubInjector) Scroll(dx, dy int)              { log.Printf("[stub] scroll %+d,%+d", dx, dy) }

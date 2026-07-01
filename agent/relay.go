@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -17,13 +18,13 @@ import (
 // its saved key, so a remembered phone reconnects to the same address without a
 // new QR. The pairing URL then carries &p=1, telling the phone this device is
 // reconnectable and can be saved.
-func runRelay(sealer *Sealer, inj Injector, key []byte, keyB64, relayHost string, persistent bool) error {
+func runRelay(sealer *Sealer, inj Injector, scr Screener, key []byte, keyB64, relayHost string, persistent bool) error {
 	desiredRoom := ""
 	if persistent {
 		desiredRoom = deriveRoom(key)
 	}
 	for {
-		err := relayOnce(sealer, inj, keyB64, relayHost, desiredRoom, persistent)
+		err := relayOnce(sealer, inj, scr, keyB64, relayHost, desiredRoom, persistent)
 		if errors.Is(err, errRoomTaken) {
 			// stable room unavailable (collision) — degrade to a random room.
 			desiredRoom, persistent = "", false
@@ -42,7 +43,7 @@ func runRelay(sealer *Sealer, inj Injector, key []byte, keyB64, relayHost string
 
 var errRoomTaken = errors.New("room_taken")
 
-func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost, desiredRoom string, persistent bool) error {
+func relayOnce(sealer *Sealer, inj Injector, scr Screener, keyB64, relayHost, desiredRoom string, persistent bool) error {
 	ctx := context.Background()
 	wsURL := "wss://" + relayHost + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
@@ -51,6 +52,17 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost, desiredRoom stri
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(128 * 1024)
+
+	// One relay socket is shared by every phone's session plus the read loop, and
+	// screen-view frames are pushed from per-session goroutines — serialize all
+	// writes so concurrent Write calls never interleave.
+	var wmu sync.Mutex
+	writeData := func(to int, payload string) {
+		out, _ := json.Marshal(frame{T: "data", To: to, Payload: payload})
+		wmu.Lock()
+		c.Write(ctx, websocket.MessageText, out)
+		wmu.Unlock()
+	}
 
 	// register as a host. When we have a persistent identity, ask the relay for
 	// our derived room so saved phones find us at the same address every time.
@@ -62,6 +74,11 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost, desiredRoom stri
 	sessions := map[int]*Session{}
 	roster := NewRoster()
 	defer roster.Reset()
+	defer func() {
+		for _, se := range sessions {
+			se.Close()
+		}
+	}()
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -102,19 +119,20 @@ func relayOnce(sealer *Sealer, inj Injector, keyB64, relayHost, desiredRoom stri
 			if f.Event == "join" {
 				roster.Add(f.ID, f.IP)
 			} else if f.Event == "leave" {
+				if se := sessions[f.ID]; se != nil {
+					se.Close()
+				}
 				delete(sessions, f.ID)
 				roster.Remove(f.ID)
 			}
 		case "data":
 			se := sessions[f.From]
 			if se == nil {
-				se = NewSession(sealer, inj)
+				id := f.From
+				se = NewSession(sealer, inj, scr, func(payload string) { writeData(id, payload) })
 				sessions[f.From] = se
 			}
-			if reply := se.Handle(f.Payload); reply != "" {
-				out, _ := json.Marshal(frame{T: "data", To: f.From, Payload: reply})
-				c.Write(ctx, websocket.MessageText, out)
-			}
+			se.Handle(f.Payload)
 		case "error":
 			if f.Error == "room_taken" {
 				// our derived room is held by a different live device (a hash

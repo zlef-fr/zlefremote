@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"log"
+	"sync"
+	"time"
 )
 
 // Injector is the OS input backend. The real implementation (inject_robotgo.go,
@@ -11,6 +14,7 @@ import (
 // can be exercised anywhere.
 type Injector interface {
 	MoveRel(dx, dy int)
+	MoveAbs(x, y int)
 	Click(button string, double bool)
 	Toggle(button string, down bool)
 	Scroll(dx, dy int)
@@ -21,57 +25,105 @@ type Injector interface {
 	HostInfo() (name, os string)
 }
 
+// Screener captures the desktop as JPEG frames for the live-view feature. The
+// real implementation (screencap_robotgo.go, -tags robotgo) grabs the screen;
+// the stub (screencap_stub.go) reports unavailable so the phone hides the tab.
+type Screener interface {
+	Available() bool
+	// Capture grabs the screen scaled to scalePct (of native size) and returns
+	// JPEG bytes at the given quality plus the encoded width/height.
+	Capture(scalePct, quality int) (jpeg []byte, w, h int, err error)
+}
+
 type cmd struct {
 	T      string   `json:"t"`
 	DX     int      `json:"dx"`
 	DY     int      `json:"dy"`
 	X      int      `json:"x"`
 	Y      int      `json:"y"`
+	NX     float64  `json:"nx"` // absolute pointer, normalized 0..1 of screen
+	NY     float64  `json:"ny"`
 	B      string   `json:"b"`
 	Double bool     `json:"double"`
 	K      string   `json:"k"`
 	Mods   []string `json:"mods"`
 	S      string   `json:"s"`
+	On     bool     `json:"on"`    // view: start/stop live screen stream
+	FPS    int      `json:"fps"`   // view: target frames per second
+	Q      int      `json:"q"`     // view: JPEG quality
+	Scale  int      `json:"scale"` // view: capture scale (percent of native)
 }
 
-// Session decrypts client frames and dispatches them to the injector. One
-// Session per connected phone.
+// A relayed frame must stay under the relay's 64 KB payload ceiling once the
+// JPEG is base64'd, wrapped in JSON, sealed and base64'd again (~1.8× inflation).
+// 32 KB of raw JPEG per chunk lands the final sealed frame around 58 KB.
+const frameChunkMax = 32 * 1024
+
+// Session decrypts client frames and dispatches them to the injector, and (for
+// the live-view feature) pushes sealed screen frames back to one phone. One
+// Session per connected phone; send() delivers a sealed frame to that phone.
 type Session struct {
 	sealer *Sealer
 	inj    Injector
+	scr    Screener
+	send   func(sealed string) // push a sealed frame to this one client
 	paired bool
+
+	mu                  sync.Mutex
+	streaming           bool
+	stopCh              chan struct{}
+	fps, quality, scale int
+	frameID             uint32
 }
 
-func NewSession(s *Sealer, inj Injector) *Session { return &Session{sealer: s, inj: inj} }
+func NewSession(s *Sealer, inj Injector, scr Screener, send func(string)) *Session {
+	return &Session{sealer: s, inj: inj, scr: scr, send: send}
+}
 
-// Handle decrypts an incoming sealed frame, applies it, and returns a sealed
-// reply frame to send back (empty string if there is nothing to reply).
-func (se *Session) Handle(frame string) (reply string) {
+// sealSend marshals v to JSON, seals it, and pushes it to this phone.
+func (se *Session) sealSend(v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	out, err := se.sealer.Seal(b)
+	if err != nil {
+		return
+	}
+	se.send(out)
+}
+
+// Handle decrypts an incoming sealed frame and applies it. Wrong key / tampered
+// frames are silently ignored (this is also the auth gate).
+func (se *Session) Handle(frame string) {
 	pt, err := se.sealer.Open(frame)
 	if err != nil {
-		// wrong key / tampered frame → ignore (this is also the auth gate)
-		return ""
+		return
 	}
 	var c cmd
-	if err := json.Unmarshal(pt, &c); err != nil {
-		return ""
+	if json.Unmarshal(pt, &c) != nil {
+		return
 	}
 	switch c.T {
 	case "hello":
 		se.paired = true
 		w, h := se.inj.ScreenSize()
 		name, os := se.inj.HostInfo()
-		b, _ := json.Marshal(map[string]any{
+		se.sealSend(map[string]any{
 			"t": "welcome", "name": name, "os": os,
 			"screen": map[string]int{"w": w, "h": h},
+			"cap":    map[string]bool{"screen": se.scr.Available()},
 		})
-		out, _ := se.sealer.Seal(b)
 		log.Printf("paired with a phone")
 		emit("event", "paired")
-		return out
 	case "mv":
 		se.inj.MoveRel(c.DX, c.DY)
+	case "mvabs":
+		se.moveAbs(c.NX, c.NY)
 	case "click":
+		se.inj.Click(norm(c.B), c.Double)
+	case "clickabs":
+		se.moveAbs(c.NX, c.NY)
 		se.inj.Click(norm(c.B), c.Double)
 	case "down":
 		se.inj.Toggle(norm(c.B), true)
@@ -85,8 +137,166 @@ func (se *Session) Handle(frame string) (reply string) {
 		se.inj.TypeStr(c.S)
 	case "media":
 		se.inj.Media(c.K)
+	case "view":
+		if c.On {
+			se.startStream(c.FPS, c.Q, c.Scale)
+		} else {
+			se.stopStream()
+		}
 	}
-	return ""
+}
+
+func (se *Session) moveAbs(nx, ny float64) {
+	nx = clampF(nx)
+	ny = clampF(ny)
+	w, h := se.inj.ScreenSize()
+	x, y := int(nx*float64(w)), int(ny*float64(h))
+	if x >= w {
+		x = w - 1
+	}
+	if y >= h {
+		y = h - 1
+	}
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	se.inj.MoveAbs(x, y)
+}
+
+// startStream begins (or, if already running, retunes) the live screen stream.
+func (se *Session) startStream(fps, q, scale int) {
+	if !se.scr.Available() {
+		se.sealSend(map[string]any{"t": "viewerr", "reason": "unsupported"})
+		return
+	}
+	se.mu.Lock()
+	se.fps = clampInt(fps, 1, 20, 8)
+	se.quality = clampInt(q, 20, 90, 55)
+	se.scale = clampInt(scale, 20, 100, 75)
+	if !se.streaming {
+		se.streaming = true
+		se.stopCh = make(chan struct{})
+		stop := se.stopCh
+		se.mu.Unlock()
+		go se.streamLoop(stop)
+		return
+	}
+	se.mu.Unlock()
+}
+
+func (se *Session) stopStream() {
+	se.mu.Lock()
+	if se.streaming {
+		se.streaming = false
+		close(se.stopCh)
+	}
+	se.mu.Unlock()
+}
+
+// Close stops any live stream when the phone disconnects.
+func (se *Session) Close() { se.stopStream() }
+
+func (se *Session) streamLoop(stop chan struct{}) {
+	emit("event", "view-start")
+	if !machineMode {
+		log.Printf("screen view: streaming to a phone")
+	}
+	defer func() {
+		emit("event", "view-stop")
+		if !machineMode {
+			log.Printf("screen view: stopped")
+		}
+	}()
+	for {
+		if stopped(stop) {
+			return
+		}
+		se.mu.Lock()
+		fps, q, scale := se.fps, se.quality, se.scale
+		se.mu.Unlock()
+
+		start := time.Now()
+		jb, w, h, err := se.scr.Capture(scale, q)
+		if err != nil {
+			se.sealSend(map[string]any{"t": "viewerr", "reason": "capture"})
+			if sleepStop(stop, time.Second) {
+				return
+			}
+			continue
+		}
+		if len(jb) > 0 {
+			se.frameID++
+			id := se.frameID
+			n := (len(jb) + frameChunkMax - 1) / frameChunkMax
+			for s := 0; s < n; s++ {
+				lo := s * frameChunkMax
+				hi := lo + frameChunkMax
+				if hi > len(jb) {
+					hi = len(jb)
+				}
+				se.sealSend(map[string]any{
+					"t": "f", "i": id, "s": s, "n": n, "w": w, "h": h,
+					"d": base64.RawURLEncoding.EncodeToString(jb[lo:hi]),
+				})
+				if stopped(stop) {
+					return
+				}
+			}
+		}
+
+		interval := time.Second / time.Duration(fps)
+		if el := time.Since(start); el < interval {
+			if sleepStop(stop, interval-el) {
+				return
+			}
+		}
+	}
+}
+
+func stopped(stop chan struct{}) bool {
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
+}
+
+func sleepStop(stop chan struct{}, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-stop:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+func clampInt(v, lo, hi, def int) int {
+	if v == 0 {
+		return def
+	}
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func clampF(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 func norm(b string) string {

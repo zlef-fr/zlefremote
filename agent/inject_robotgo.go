@@ -53,6 +53,8 @@ func (rgInjector) MoveRel(dx, dy int) {
 	robotgo.Move(x+dx, y+dy)
 }
 
+func (rgInjector) MoveAbs(x, y int) { robotgo.Move(x, y) }
+
 func (rgInjector) Click(b string, dbl bool) { robotgo.Click(btn(b), dbl) }
 
 func (rgInjector) Toggle(b string, down bool) {

@@ -20,7 +20,23 @@ Two pieces:
 
 1. Run the agent. Pick **Local network** or **Remote**.
 2. It prints a QR code (and a URL). Scan it with your phone.
-3. The phone becomes a trackpad + keyboard + media remote.
+3. The phone becomes a trackpad + keyboard + media remote — and a **live screen**.
+
+### Live screen view
+
+Open the **Screen** tab on the phone to see the computer's screen in real time
+and drive it like a touchscreen:
+
+- **Tap** = left click at that point · **double-tap** = double click ·
+  **two-finger tap** = right click · **drag your finger** = move the pointer live.
+- Three quality presets — **Low / Balanced / Sharp** (trade frame rate and
+  sharpness for bandwidth); retune live from the bar under the view.
+- The agent captures the screen, downscales + JPEG-encodes it, and streams it in
+  chunks that stay under the relay's frame ceiling. Every frame is sealed with
+  the same **AES-256-GCM** key as input — the relay never sees your screen.
+- Screen capture needs the real input backend (built with `-tags robotgo`, which
+  already needs a display). The Screen tab only appears when the connected agent
+  reports it can capture (`cap.screen` in the pairing handshake).
 
 ## Security model
 
