@@ -1,5 +1,7 @@
 # ZlefRemote
 
+![views](https://assets.zlef.fr/badge/views/zlef-fr/zlefremote.svg)
+
 **Your phone is the trackpad.** Control your computer's mouse and keyboard from
 any phone — over your local Wi-Fi, or end-to-end encrypted from anywhere through
 [remote.zlef.fr](https://remote.zlef.fr). No app store, no account.
