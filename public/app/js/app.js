@@ -69,6 +69,29 @@
     qbar.appendChild(b);
   });
 
+  // monitor picker — appears only when the computer has more than one display
+  const monBar = $('monBar');
+  function buildMonBar(screens) {
+    monBar.innerHTML = '';
+    if (!screens || screens.length < 2) { monBar.hidden = true; return; }
+    screens.forEach((sc, i) => {
+      const b = document.createElement('button');
+      b.className = 'monbtn' + (ZRScreen.getDisplay() === i ? ' active' : '');
+      b.dataset.d = i;
+      b.setAttribute('aria-label', `${t('display')} ${i + 1}`);
+      b.innerHTML = `<span class="mon-ic">${ZRIcon.svg('monitor')}</span>` +
+        `<span class="mon-n">${i + 1}</span>` +
+        (sc.w ? `<span class="mon-res">${sc.w | 0}×${sc.h | 0}</span>` : '');
+      b.addEventListener('click', () => {
+        ZRScreen.setDisplay(i);
+        monBar.querySelectorAll('.monbtn').forEach((x) => x.classList.toggle('active', +x.dataset.d === i));
+        vibrate(6);
+      });
+      monBar.appendChild(b);
+    });
+    monBar.hidden = false;
+  }
+
   // ── connection state machine ───────────────────────────────────────────
   const ov = $('overlay'), ovTitle = $('ovTitle'), ovText = $('ovText'),
         ovBtn = $('ovBtn'), ovHome = $('ovHome'), ovSpin = $('ovSpin'), ovIcon = $('ovIcon'),
@@ -129,6 +152,8 @@
       // resume the stream if the user is already on that tab (reconnect).
       const canScreen = !!(c.cap && c.cap.screen);
       $('tabScreen').hidden = !canScreen;
+      ZRScreen.setScreens(c.screens);
+      buildMonBar(canScreen ? c.screens : null);
       if (canScreen && currentView() === 'screen') ZRScreen.start();
       // remember persistent computers so they reconnect from Home in one tap
       if (ZRConn.isPersistent()) {
@@ -272,23 +297,55 @@
     b.addEventListener('click', () => pressKey(b.dataset.k));
   });
 
-  // ── typing ───────────────────────────────────────────────────────────────
-  const typer = $('typer');
+  // ── typing + live echo ─────────────────────────────────────────────────────
+  // The textarea stays empty (text is streamed to the host as it's typed), so
+  // the echo strip is the visible feedback: each char pops in, and the batch
+  // fades away every ECHO_MAX chars (or after a moment of idle).
+  const typer = $('typer'), typerWrap = $('typerWrap'), typerEcho = $('typerEcho');
+  const ECHO_MAX = 7, ECHO_IDLE_MS = 1600;
+  let echoBatch = null, echoCount = 0, echoIdle = null;
+  function echoFlush() {
+    clearTimeout(echoIdle); echoIdle = null;
+    const b = echoBatch; echoBatch = null; echoCount = 0;
+    if (!b) return;
+    b.classList.add('out');
+    setTimeout(() => {
+      b.remove();
+      if (!typerEcho.querySelector('.tbatch')) typerWrap.classList.remove('echoing');
+    }, 420);
+  }
+  function echoChar(ch, cls) {
+    if (!echoBatch) {
+      echoBatch = document.createElement('span'); echoBatch.className = 'tbatch';
+      typerEcho.appendChild(echoBatch);
+    }
+    const s = document.createElement('span');
+    s.className = 'tch' + (cls ? ' ' + cls : '');
+    s.textContent = ch === ' ' ? '␣' : ch;
+    echoBatch.appendChild(s);
+    typerWrap.classList.add('echoing');
+    echoCount++;
+    clearTimeout(echoIdle);
+    if (echoCount >= ECHO_MAX) echoFlush();
+    else echoIdle = setTimeout(echoFlush, ECHO_IDLE_MS);
+  }
+  const echoText = (str) => { for (const ch of str) echoChar(ch); };
+
   typer.addEventListener('beforeinput', (e) => {
     // Enter / Backspace map to host key presses, not literal text
     if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
-      e.preventDefault(); pressKey('enter'); return;
+      e.preventDefault(); pressKey('enter'); echoChar('↵', 'ctl'); echoFlush(); return;
     }
     if (e.inputType === 'deleteContentBackward') {
-      e.preventDefault(); pressKey('backspace'); return;
+      e.preventDefault(); pressKey('backspace'); echoChar('⌫', 'del'); return;
     }
   });
   typer.addEventListener('input', (e) => {
     if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
       const s = e.data;
       if (s == null) return;
-      if (stickyMods.size && s.length === 1) { pressKey(s); }
-      else send({ t: 'text', s });
+      if (stickyMods.size && s.length === 1) { pressKey(s); echoChar(s, 'ctl'); }
+      else { send({ t: 'text', s }); echoText(s); }
       typer.value = ''; // keep the field from drifting out of sync
     }
   });
@@ -296,7 +353,11 @@
   typer.addEventListener('keydown', (e) => {
     const map = { Enter: 'enter', Backspace: 'backspace', Tab: 'tab', Escape: 'escape',
       ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Delete: 'delete' };
-    if (map[e.key]) { e.preventDefault(); pressKey(map[e.key]); }
+    if (map[e.key]) {
+      e.preventDefault(); pressKey(map[e.key]);
+      if (e.key === 'Enter') { echoChar('↵', 'ctl'); echoFlush(); }
+      else if (e.key === 'Backspace') echoChar('⌫', 'del');
+    }
   });
 
   // ── media (remote layout: volume row · transport row w/ big play) ──────────

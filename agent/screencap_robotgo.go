@@ -25,10 +25,41 @@ func newScreener() Screener {
 
 func (rgScreen) Available() bool { return true }
 
-// Capture grabs the primary display, downscales it to scalePct of its native
-// size, and returns JPEG bytes at the given quality plus the encoded dims.
-func (rgScreen) Capture(scalePct, quality int) ([]byte, int, int, error) {
-	src, err := robotgo.CaptureImg()
+// Displays enumerates monitors (global desktop coordinates). Xinerama can be
+// absent (headless Xvfb, odd servers) → DisplaysNum reports 0; fall back to a
+// single display covering the primary screen so view/control keep working.
+func (rgScreen) Displays() []DisplayInfo {
+	n := robotgo.DisplaysNum()
+	var out []DisplayInfo
+	for i := 0; i < n; i++ {
+		x, y, w, h := robotgo.GetDisplayBounds(i)
+		if w > 0 && h > 0 {
+			out = append(out, DisplayInfo{X: x, Y: y, W: w, H: h})
+		}
+	}
+	if len(out) == 0 {
+		w, h := robotgo.GetScreenSize()
+		out = []DisplayInfo{{X: 0, Y: 0, W: w, H: h}}
+	}
+	return out
+}
+
+// Capture grabs one display (by index into Displays), downscales it to
+// scalePct of its native size, and returns JPEG bytes at the given quality
+// plus the encoded dims.
+func (s rgScreen) Capture(display, scalePct, quality int) ([]byte, int, int, error) {
+	var (
+		src image.Image
+		err error
+	)
+	ds := s.Displays()
+	if display > 0 && display < len(ds) {
+		d := ds[display]
+		src, err = robotgo.CaptureImg(d.X, d.Y, d.W, d.H)
+	} else {
+		// display 0 (or out of range): the primary — same as the historical path
+		src, err = robotgo.CaptureImg()
+	}
 	if err != nil {
 		return nil, 0, 0, err
 	}
