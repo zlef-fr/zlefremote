@@ -81,7 +81,13 @@ func (rgInjector) KeyTap(k string, mods []string) {
 	robotgo.KeyTap(key, args...)
 }
 
-func (rgInjector) TypeStr(s string) { robotgo.TypeStr(s) }
+// TypeStr injects literal text. On Linux robotgo's X11 "type" path is not
+// layout-independent (it routes ASCII through keyCodeForChar with a US-QWERTY
+// shift heuristic, and builds Unicode keysym names with lowercase hex that
+// XStringToKeysym rejects) — so on a non-US layout digits/symbols come out
+// shifted-wrong and accents get dropped. typeText (type_linux.go) does proper
+// layout-independent injection; on Windows/macOS it delegates to robotgo.
+func (rgInjector) TypeStr(s string) { typeText(s) }
 
 func (rgInjector) Media(k string) {
 	if mk, ok := mediaMap[k]; ok {
