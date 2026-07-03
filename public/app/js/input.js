@@ -2,11 +2,13 @@
 // the provided send() function. Works with touch (phone) and mouse (desktop test).
 const ZRInput = (() => {
   let send = () => {};
+  let fx = () => {};               // visual-feedback hook: fx(kind, x, y) in pad-local px
   let cfg = { sensitivity: 1.6, natural: true, scrollSpeed: 1.0 };
 
-  function attach(pad, sendFn, getCfg) {
+  function attach(pad, sendFn, getCfg, fxFn) {
     send = sendFn;
     if (getCfg) cfg = getCfg;
+    if (fxFn) fx = fxFn;
 
     let pointers = new Map();        // active touches
     let last = null;                 // {x,y} of primary finger
@@ -18,6 +20,8 @@ const ZRInput = (() => {
     let scrollAccum = { x: 0, y: 0 };
     let twoFinger = false;
     let lastScroll = null;
+    let rect = null;                 // pad bounds, captured per gesture
+    const local = (p) => rect ? { x: p.x - rect.left, y: p.y - rect.top } : { x: p.x, y: p.y };
     const TAP_MS = 220, TAP_SLOP = 10, DRAGLOCK = { on: false };
 
     function accel(d) {
@@ -34,12 +38,14 @@ const ZRInput = (() => {
       const n = pointers.size;
       if (n === 1) {
         const p = first();
+        rect = pad.getBoundingClientRect();
         last = { x: p.x, y: p.y }; moved = 0; startT = Date.now();
         twoFinger = false;
+        const lp = local(p); fx(dragging || tapPending ? 'grab' : 'start', lp.x, lp.y);
         // tap-then-press → start a drag
         if (tapPending) { dragging = true; send({ t: 'down', b: 'left' }); }
       } else if (n === 2) {
-        twoFinger = true; lastScroll = midpoint();
+        twoFinger = true; lastScroll = midpoint(); fx('end');
       }
     }
 
@@ -67,6 +73,7 @@ const ZRInput = (() => {
         const dx = p.x - last.x, dy = p.y - last.y;
         moved += Math.hypot(dx, dy);
         last = { x: p.x, y: p.y };
+        const lp = local(p); fx('move', lp.x, lp.y);
         const mx = Math.round(accel(dx)), my = Math.round(accel(dy));
         if (mx || my) send({ t: 'mv', dx: mx, dy: my });
       }
@@ -77,11 +84,12 @@ const ZRInput = (() => {
       for (const p of e.changedTouches || [e]) pointers.delete(p.identifier ?? 'm');
       const dt = Date.now() - startT;
 
-      if (dragging && pointers.size === 0) { dragging = false; send({ t: 'up', b: 'left' }); return; }
+      if (dragging && pointers.size === 0) { dragging = false; send({ t: 'up', b: 'left' }); fx('end'); return; }
 
       if (wasN === 2 && pointers.size <= 1 && moved < TAP_SLOP && dt < TAP_MS && !twoFingerMoved()) {
         // two-finger tap → right click
         send({ t: 'click', b: 'right' });
+        if (last && rect) fx('tap', last.x - rect.left, last.y - rect.top, 'right');
         twoFinger = false;
         return;
       }
@@ -90,12 +98,13 @@ const ZRInput = (() => {
         if (moved < TAP_SLOP && dt < TAP_MS) {
           // quick tap → left click, and arm tap-drag window
           send({ t: 'click', b: 'left' });
+          if (last && rect) fx('tap', last.x - rect.left, last.y - rect.top);
           tapPending = true;
           clearTimeout(tapTimer);
           tapTimer = setTimeout(() => { tapPending = false; }, 300);
         }
       }
-      if (pointers.size === 0) { twoFinger = false; lastScroll = null; }
+      if (pointers.size === 0) { twoFinger = false; lastScroll = null; fx('end'); }
     }
 
     function first() { return pointers.values().next().value; }

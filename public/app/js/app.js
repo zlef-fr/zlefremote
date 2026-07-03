@@ -33,7 +33,7 @@
   $('bLeft').textContent = t('btn_left');
   $('bRight').textContent = t('btn_right');
   $('bMid').textContent = t('btn_mid');
-  $('bDrag').textContent = t('btn_drag');
+  $('bDragLabel').textContent = t('btn_drag');
   $('typer').placeholder = t('type_ph');
   $('setTitle').textContent = t('settings');
   $('lblSens').textContent = t('sensitivity');
@@ -143,8 +143,55 @@
     }
   });
 
-  // ── trackpad ───────────────────────────────────────────────────────────
-  ZRInput.attach($('pad'), (cmd) => { send(cmd); if (cmd.t === 'click') vibrate(8); }, getCfg);
+  // ── trackpad + live touch feedback ───────────────────────────────────────
+  const padFx = $('padFx'), padHint = $('padHint');
+  let glowEl = null, hintDone = false;
+  function ensureGlow() {
+    if (!glowEl) { glowEl = document.createElement('div'); glowEl.className = 'pad-glow'; padFx.appendChild(glowEl); }
+    return glowEl;
+  }
+  function ripple(x, y, kind) {
+    const r = document.createElement('div');
+    r.className = 'pad-ripple' + (kind === 'right' ? ' right' : '');
+    r.style.left = x + 'px'; r.style.top = y + 'px';
+    padFx.appendChild(r);
+    setTimeout(() => r.remove(), 500);
+  }
+  // fx(kind, x, y[, sub]) — kind: start | grab | move | tap | end
+  function padFxFn(kind, x, y, sub) {
+    if (!hintDone && (kind === 'start' || kind === 'grab' || kind === 'tap')) {
+      hintDone = true; padHint.classList.add('hide');
+    }
+    if (kind === 'start' || kind === 'grab' || kind === 'move') {
+      const g = ensureGlow();
+      g.style.transform = `translate(${x}px, ${y}px)`;
+      g.classList.remove('gone');
+      g.classList.toggle('grab', kind === 'grab');
+    } else if (kind === 'tap') {
+      ripple(x, y, sub);
+      if (glowEl) { glowEl.classList.add('gone'); }
+    } else if (kind === 'end') {
+      if (glowEl) { const g = glowEl; g.classList.add('gone'); glowEl = null; setTimeout(() => g.remove(), 260); }
+    }
+  }
+  ZRInput.attach($('pad'), (cmd) => { send(cmd); if (cmd.t === 'click') vibrate(8); }, getCfg, padFxFn);
+
+  // dedicated scroll rail (single-finger scrolling, easier than two-finger)
+  const rail = $('scrollRail');
+  let railLast = null;
+  const railDown = (y) => { railLast = y; rail.classList.add('active'); };
+  const railMove = (y) => {
+    if (railLast == null) return;
+    const dy = y - railLast; railLast = y;
+    const dir = cfg.natural ? 1 : -1;
+    const amt = Math.round(dy * dir * (cfg.scrollSpeed || 1) * 1.3);
+    if (amt) send({ t: 'scroll', dx: 0, dy: amt });
+  };
+  const railUp = () => { railLast = null; rail.classList.remove('active'); };
+  rail.addEventListener('touchstart', (e) => { e.preventDefault(); railDown(e.touches[0].clientY); }, { passive: false });
+  rail.addEventListener('touchmove', (e) => { e.preventDefault(); railMove(e.touches[0].clientY); }, { passive: false });
+  rail.addEventListener('touchend', (e) => { e.preventDefault(); railUp(); }, { passive: false });
+  rail.addEventListener('touchcancel', railUp);
 
   // mouse buttons
   document.querySelectorAll('.mbtn[data-click]').forEach((b) => {
@@ -163,10 +210,14 @@
   const currentView = () => document.querySelector('.tab.active')?.dataset.view;
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
+      if (tab.classList.contains('active')) return;
       document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
       tab.classList.add('active');
       const v = tab.dataset.view;
       for (const k in views) views[k].hidden = (k !== v);
+      // replay the entrance animation on the newly shown view
+      const shown = views[v];
+      shown.classList.remove('view-enter'); void shown.offsetWidth; shown.classList.add('view-enter');
       if (v === 'keys') setTimeout(() => $('typer').focus(), 60);
       // start/stop the live screen stream as its tab gains/loses focus
       if (v === 'screen') {
@@ -203,10 +254,9 @@
     vibrate(8);
   }
 
-  // ── special keys ─────────────────────────────────────────────────────────
+  // ── special keys (arrows live in the d-pad below) ──────────────────────────
   const SPECS = [
     [t('esc'), 'escape'], [t('tab'), 'tab'], [t('back'), 'backspace'], [t('enter'), 'enter'],
-    ['↑', 'up'], ['↓', 'down'], ['←', 'left'], ['→', 'right'],
     ['Home', 'home'], ['End', 'end'], ['PgUp', 'pageup'], ['PgDn', 'pagedown'],
     ['Del', 'delete'], [t('space'), 'space'], ['F5', 'f5'], ['F11', 'f11'],
   ];
@@ -216,6 +266,10 @@
     b.className = 'speckey'; b.textContent = label;
     b.addEventListener('click', () => pressKey(k));
     specKeys.appendChild(b);
+  });
+  // directional d-pad (already in the DOM) → arrow keys
+  document.querySelectorAll('#dpad .dkey').forEach((b) => {
+    b.addEventListener('click', () => pressKey(b.dataset.k));
   });
 
   // ── typing ───────────────────────────────────────────────────────────────
@@ -245,15 +299,15 @@
     if (map[e.key]) { e.preventDefault(); pressKey(map[e.key]); }
   });
 
-  // ── media ──────────────────────────────────────────────────────────────
+  // ── media (remote layout: volume row · transport row w/ big play) ──────────
   const MEDIA = [
-    ['voldown', t('vol_down'), 'voldown'], ['vol', t('vol_up'), 'volup'], ['mute', t('mute'), 'mute'],
-    ['play', t('play'), 'playpause'], ['prev', t('prev'), 'prev'], ['next', t('next'), 'next'],
+    ['voldown', t('vol_down'), 'voldown', ''], ['mute', t('mute'), 'mute', ''], ['vol', t('vol_up'), 'volup', ''],
+    ['prev', t('prev'), 'prev', ''], ['play', t('play'), 'playpause', 'primary'], ['next', t('next'), 'next', ''],
   ];
   const mg = $('mediaGrid');
-  MEDIA.forEach(([ic, label, k]) => {
+  MEDIA.forEach(([ic, label, k, cls]) => {
     const b = document.createElement('button');
-    b.className = 'mediakey';
+    b.className = 'mediakey' + (cls ? ' ' + cls : '');
     b.innerHTML = `<span class="mk-ic">${ZRIcon.svg(ic)}</span><span class="mk-l">${label}</span>`;
     b.addEventListener('click', () => { send({ t: 'media', k }); vibrate(10); });
     mg.appendChild(b);
