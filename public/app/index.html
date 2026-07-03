@@ -17,7 +17,7 @@
 <link rel="manifest" href="/app.webmanifest">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=7">
+<link rel="stylesheet" href="/app/css/client.css?v=8">
 <!-- InstallKit: accurate per-device "install this PWA" steps. mode=manual → no
      floating FAB; the home screen's Install button calls InstallKit.open(). -->
 <script defer src="https://installkit.zlef.fr/v1/install-kit.js"
@@ -100,7 +100,10 @@
 
   <!-- KEYBOARD -->
   <section class="view view-keys" id="viewKeys" hidden>
-    <textarea id="typer" class="typer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+    <div class="typerwrap" id="typerWrap">
+      <textarea id="typer" class="typer" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+      <div class="typer-echo" id="typerEcho" aria-hidden="true"></div>
+    </div>
     <div class="modrow" id="modRow"></div>
     <div class="speckeys" id="specKeys"></div>
     <div class="dpad" id="dpad">
@@ -123,6 +126,7 @@
       <div class="screen-msg" id="screenMsg" hidden></div>
       <div class="screen-hud" id="screenHud"></div>
     </div>
+    <div class="monbar" id="monBar" role="group" hidden></div>
     <div class="qualbar" id="qualBar" role="group"></div>
   </section>
 </main>
@@ -167,14 +171,14 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="/app/js/icons.js?v=3"></script>
-<script src="/app/js/i18n.js?v=4"></script>
+<script src="/app/js/i18n.js?v=5"></script>
 <script src="/app/js/crypto.js?v=2"></script>
 <script src="/app/js/conn.js?v=2"></script>
 <script src="/app/js/input.js?v=2"></script>
 <script src="/app/js/home.js?v=3"></script>
 <script src="/app/js/media-session.js?v=1"></script>
-<script src="/app/js/screen.js?v=2"></script>
-<script src="/app/js/app.js?v=6"></script>
+<script src="/app/js/screen.js?v=3"></script>
+<script src="/app/js/app.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

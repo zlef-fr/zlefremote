@@ -30,9 +30,18 @@ type Injector interface {
 // the stub (screencap_stub.go) reports unavailable so the phone hides the tab.
 type Screener interface {
 	Available() bool
-	// Capture grabs the screen scaled to scalePct (of native size) and returns
-	// JPEG bytes at the given quality plus the encoded width/height.
-	Capture(scalePct, quality int) (jpeg []byte, w, h int, err error)
+	// Displays enumerates monitors in global desktop coordinates. At least one
+	// entry when Available; nil otherwise.
+	Displays() []DisplayInfo
+	// Capture grabs one display (index into Displays) scaled to scalePct (of
+	// native size) and returns JPEG bytes at the given quality plus the
+	// encoded width/height.
+	Capture(display, scalePct, quality int) (jpeg []byte, w, h int, err error)
+}
+
+// DisplayInfo is one monitor's rectangle in the global desktop space.
+type DisplayInfo struct {
+	X, Y, W, H int
 }
 
 type cmd struct {
@@ -52,6 +61,7 @@ type cmd struct {
 	FPS    int      `json:"fps"`   // view: target frames per second
 	Q      int      `json:"q"`     // view: JPEG quality
 	Scale  int      `json:"scale"` // view: capture scale (percent of native)
+	D      int      `json:"d"`     // view: display index (multi-monitor)
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -73,6 +83,7 @@ type Session struct {
 	streaming           bool
 	stopCh              chan struct{}
 	fps, quality, scale int
+	display             int // which monitor is streamed / abs-pointer target
 	frameID             uint32
 }
 
@@ -109,10 +120,15 @@ func (se *Session) Handle(frame string) {
 		se.paired = true
 		w, h := se.inj.ScreenSize()
 		name, os := se.inj.HostInfo()
+		screens := []map[string]int{}
+		for _, d := range se.scr.Displays() {
+			screens = append(screens, map[string]int{"w": d.W, "h": d.H})
+		}
 		se.sealSend(map[string]any{
 			"t": "welcome", "name": name, "os": os,
-			"screen": map[string]int{"w": w, "h": h},
-			"cap":    map[string]bool{"screen": se.scr.Available()},
+			"screen":  map[string]int{"w": w, "h": h},
+			"screens": screens,
+			"cap":     map[string]bool{"screen": se.scr.Available()},
 		})
 		log.Printf("paired with a phone")
 		emit("event", "paired")
@@ -139,17 +155,32 @@ func (se *Session) Handle(frame string) {
 		se.inj.Media(c.K)
 	case "view":
 		if c.On {
-			se.startStream(c.FPS, c.Q, c.Scale)
+			se.startStream(c.FPS, c.Q, c.Scale, c.D)
 		} else {
 			se.stopStream()
 		}
 	}
 }
 
+// moveAbs maps a normalized 0..1 point onto the display currently being
+// viewed (multi-monitor: each display has its own rect in the global desktop
+// space). Falls back to the primary screen when no display info is available.
 func (se *Session) moveAbs(nx, ny float64) {
 	nx = clampF(nx)
 	ny = clampF(ny)
-	w, h := se.inj.ScreenSize()
+	se.mu.Lock()
+	di := se.display
+	se.mu.Unlock()
+	ox, oy, w, h := 0, 0, 0, 0
+	if ds := se.scr.Displays(); len(ds) > 0 {
+		if di < 0 || di >= len(ds) {
+			di = 0
+		}
+		d := ds[di]
+		ox, oy, w, h = d.X, d.Y, d.W, d.H
+	} else {
+		w, h = se.inj.ScreenSize()
+	}
 	x, y := int(nx*float64(w)), int(ny*float64(h))
 	if x >= w {
 		x = w - 1
@@ -163,19 +194,24 @@ func (se *Session) moveAbs(nx, ny float64) {
 	if y < 0 {
 		y = 0
 	}
-	se.inj.MoveAbs(x, y)
+	se.inj.MoveAbs(ox+x, oy+y)
 }
 
-// startStream begins (or, if already running, retunes) the live screen stream.
-func (se *Session) startStream(fps, q, scale int) {
+// startStream begins (or, if already running, retunes) the live screen
+// stream. display switches monitors live — the loop re-reads it every frame.
+func (se *Session) startStream(fps, q, scale, display int) {
 	if !se.scr.Available() {
 		se.sealSend(map[string]any{"t": "viewerr", "reason": "unsupported"})
 		return
+	}
+	if n := len(se.scr.Displays()); display < 0 || display >= n {
+		display = 0
 	}
 	se.mu.Lock()
 	se.fps = clampInt(fps, 1, 20, 8)
 	se.quality = clampInt(q, 20, 90, 55)
 	se.scale = clampInt(scale, 20, 100, 75)
+	se.display = display
 	if !se.streaming {
 		se.streaming = true
 		se.stopCh = make(chan struct{})
@@ -215,11 +251,11 @@ func (se *Session) streamLoop(stop chan struct{}) {
 			return
 		}
 		se.mu.Lock()
-		fps, q, scale := se.fps, se.quality, se.scale
+		fps, q, scale, display := se.fps, se.quality, se.scale, se.display
 		se.mu.Unlock()
 
 		start := time.Now()
-		jb, w, h, err := se.scr.Capture(scale, q)
+		jb, w, h, err := se.scr.Capture(display, scale, q)
 		if err != nil {
 			se.sealSend(map[string]any{"t": "viewerr", "reason": "capture"})
 			if sleepStop(stop, time.Second) {

@@ -16,6 +16,10 @@ const ZRScreen = (() => {
   let preset = localStorage.getItem('zr_view_q') || 'med';
   if (!PRESETS[preset]) preset = 'med';
 
+  // multi-monitor: the agent's welcome lists displays; we stream one at a time
+  let screens = [];      // [{w,h}, …] from the agent (empty = unknown/single)
+  let display = 0;       // index of the monitor being viewed
+
   // reassembly of the in-flight frame
   let asm = null;           // { id, n, got, parts:[] }
   let decoding = false, pending = null; // latest complete bytes waiting to decode
@@ -94,14 +98,14 @@ const ZRScreen = (() => {
     const now = performance.now();
     if (!fpsAt) fpsAt = now;
     if (now - fpsAt >= 1000) { lastFps = Math.round((fpsCount * 1000) / (now - fpsAt)); fpsCount = 0; fpsAt = now; }
-    if (hud) hud.textContent = `${lastFps || fpsCount} fps · ${labelFor(preset)}`;
+    if (hud) hud.textContent = hudLabel();
   }
 
   // ── activation ─────────────────────────────────────────────────────────────
   function start() {
     active = true; asm = null; pending = null;
     showMsg(ZRScreen._t ? ZRScreen._t('screen_wait') : 'Waiting for the screen…');
-    send(Object.assign({ t: 'view', on: true }, PRESETS[preset]));
+    send(Object.assign({ t: 'view', on: true, d: display }, PRESETS[preset]));
   }
   function stop() {
     if (!active) return;
@@ -116,11 +120,33 @@ const ZRScreen = (() => {
   function setPreset(p) {
     if (!PRESETS[p]) return;
     preset = p; localStorage.setItem('zr_view_q', p);
-    if (active) send(Object.assign({ t: 'view', on: true }, PRESETS[preset])); // retune live
-    if (hud && lastFps) hud.textContent = `${lastFps} fps · ${labelFor(preset)}`;
+    if (active) send(Object.assign({ t: 'view', on: true, d: display }, PRESETS[preset])); // retune live
+    if (hud && lastFps) hud.textContent = hudLabel();
   }
   function getPreset() { return preset; }
   function labelFor(p) { return ZRScreen._t ? ZRScreen._t('q_' + p) : p; }
+  function hudLabel() {
+    const mon = screens.length > 1 ? ` · ${display + 1}/${screens.length}` : '';
+    return `${lastFps || fpsCount} fps · ${labelFor(preset)}${mon}`;
+  }
+
+  // ── multi-monitor ──────────────────────────────────────────────────────────
+  function setScreens(list) {
+    screens = Array.isArray(list) ? list : [];
+    if (display >= Math.max(1, screens.length)) display = 0;
+  }
+  function getScreens() { return screens; }
+  function setDisplay(i) {
+    i = i | 0;
+    if (i < 0 || (screens.length && i >= screens.length) || i === display) return;
+    display = i;
+    if (active) {
+      asm = null; pending = null; // drop half-assembled frames from the old monitor
+      showMsg(ZRScreen._t ? ZRScreen._t('screen_wait') : 'Waiting for the screen…');
+      send(Object.assign({ t: 'view', on: true, d: display }, PRESETS[preset])); // live switch
+    }
+  }
+  function getDisplay() { return display; }
 
   function onErr(reason) {
     if (!active) return;
@@ -190,5 +216,6 @@ const ZRScreen = (() => {
   }
   function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch {} }
 
-  return { config, onFrame, onErr, setActive, isActive, setPreset, getPreset, start, stop, presets: PRESETS };
+  return { config, onFrame, onErr, setActive, isActive, setPreset, getPreset, start, stop,
+    setScreens, getScreens, setDisplay, getDisplay, presets: PRESETS };
 })();

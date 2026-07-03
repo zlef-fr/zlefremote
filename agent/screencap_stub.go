@@ -13,6 +13,8 @@ func newScreener() Screener { return stubScreen{} }
 
 func (stubScreen) Available() bool { return false }
 
-func (stubScreen) Capture(scalePct, quality int) ([]byte, int, int, error) {
+func (stubScreen) Displays() []DisplayInfo { return nil }
+
+func (stubScreen) Capture(display, scalePct, quality int) ([]byte, int, int, error) {
 	return nil, 0, 0, errors.New("screen capture not supported in this build")
 }

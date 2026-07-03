@@ -33,6 +33,10 @@ and drive it like a touchscreen:
   **two-finger tap** = right click · **drag your finger** = move the pointer live.
 - Three quality presets — **Low / Balanced / Sharp** (trade frame rate and
   sharpness for bandwidth); retune live from the bar under the view.
+- **Multi-monitor**: computers with several displays get a monitor picker under
+  the view — switch the streamed display (and where taps land) with one tap.
+  The agent's pairing handshake lists displays (`screens` in `welcome`); the
+  view request carries the chosen index (`d`).
 - The agent captures the screen, downscales + JPEG-encodes it, and streams it in
   chunks that stay under the relay's frame ceiling. Every frame is sealed with
   the same **AES-256-GCM** key as input — the relay never sees your screen.

@@ -5,7 +5,7 @@
  *
  * Bump CACHE whenever the shell HTML, any /app/* asset, or a ?vN query changes,
  * or returning installs keep serving the stale shell. */
-const CACHE = 'zr-pwa-v8';
+const CACHE = 'zr-pwa-v9';
 
 // Same-origin shell + assets (no query strings; matched with ignoreSearch).
 const SHELL = [
