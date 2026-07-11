@@ -155,6 +155,10 @@
       ZRScreen.setScreens(c.screens);
       buildMonBar(canScreen ? c.screens : null);
       if (canScreen && currentView() === 'screen') ZRScreen.start();
+      // brightness slider — only for agents whose host exposes a backlight
+      const canBright = !!(c.cap && c.cap.bright);
+      $('brightWrap').hidden = !canBright;
+      if (canBright && typeof c.bright === 'number') setBrightUI(c.bright);
       // remember persistent computers so they reconnect from Home in one tap
       if (ZRConn.isPersistent()) {
         ZRHome.saveFromWelcome({
@@ -373,6 +377,31 @@
     b.addEventListener('click', () => { send({ t: 'media', k }); vibrate(10); });
     mg.appendChild(b);
   });
+
+  // ── display brightness (shown only when the agent reports cap.bright) ──────
+  // Dragging fires many input events while the agent shells out to an OS tool
+  // per value — throttle to a trailing send so the last position always lands.
+  $('lblBright').textContent = t('brightness');
+  const brightEl = $('bright'), brightVal = $('brightVal');
+  function setBrightUI(v) {
+    v = Math.max(5, Math.min(100, Math.round(v)));
+    brightEl.value = v;
+    brightVal.textContent = v + '%';
+  }
+  let brTimer = null, brSentAt = 0;
+  function sendBright() {
+    brightVal.textContent = brightEl.value + '%';
+    const now = Date.now();
+    if (now - brSentAt < 120) {
+      clearTimeout(brTimer);
+      brTimer = setTimeout(sendBright, 130 - (now - brSentAt));
+      return;
+    }
+    brSentAt = now; clearTimeout(brTimer); brTimer = null;
+    send({ t: 'bright', v: +brightEl.value });
+  }
+  brightEl.addEventListener('input', sendBright);
+  brightEl.addEventListener('change', () => { sendBright(); vibrate(8); });
 
   // ── settings sheet ───────────────────────────────────────────────────────
   $('gear').addEventListener('click', () => { $('sheet').hidden = false; });
