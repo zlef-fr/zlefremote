@@ -44,6 +44,20 @@ type DisplayInfo struct {
 	X, Y, W, H int
 }
 
+// Brightener adjusts the host display's brightness. Implementations are
+// per-OS (brightness_linux/windows/darwin.go), exec-based and cgo-free, so
+// they work in both the robotgo and stub builds. Available is probed once at
+// startup; when false the phone hides its brightness slider.
+type Brightener interface {
+	Available() bool
+	Get() (pct int, ok bool) // current brightness, 0..100
+	Set(pct int)             // apply brightness, 0..100 (already clamped)
+}
+
+// Brightness floor: 0 turns some backlights/gamma fully black, which would
+// leave the user unable to see the screen to recover. Never go below this.
+const brightMin = 5
+
 type cmd struct {
 	T      string   `json:"t"`
 	DX     int      `json:"dx"`
@@ -62,6 +76,7 @@ type cmd struct {
 	Q      int      `json:"q"`     // view: JPEG quality
 	Scale  int      `json:"scale"` // view: capture scale (percent of native)
 	D      int      `json:"d"`     // view: display index (multi-monitor)
+	V      int      `json:"v"`     // bright: target brightness percent
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -76,6 +91,7 @@ type Session struct {
 	sealer *Sealer
 	inj    Injector
 	scr    Screener
+	br     Brightener
 	send   func(sealed string) // push a sealed frame to this one client
 	paired bool
 
@@ -85,10 +101,12 @@ type Session struct {
 	fps, quality, scale int
 	display             int // which monitor is streamed / abs-pointer target
 	frameID             uint32
+	brightWant          int  // latest requested brightness
+	brightBusy          bool // a worker goroutine is applying brightness
 }
 
-func NewSession(s *Sealer, inj Injector, scr Screener, send func(string)) *Session {
-	return &Session{sealer: s, inj: inj, scr: scr, send: send}
+func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, send func(string)) *Session {
+	return &Session{sealer: s, inj: inj, scr: scr, br: br, send: send}
 }
 
 // sealSend marshals v to JSON, seals it, and pushes it to this phone.
@@ -124,12 +142,19 @@ func (se *Session) Handle(frame string) {
 		for _, d := range se.scr.Displays() {
 			screens = append(screens, map[string]int{"w": d.W, "h": d.H})
 		}
-		se.sealSend(map[string]any{
+		welcome := map[string]any{
 			"t": "welcome", "name": name, "os": os,
 			"screen":  map[string]int{"w": w, "h": h},
 			"screens": screens,
-			"cap":     map[string]bool{"screen": se.scr.Available()},
-		})
+			"cap": map[string]bool{
+				"screen": se.scr.Available(),
+				"bright": se.br.Available(),
+			},
+		}
+		if v, ok := se.br.Get(); ok {
+			welcome["bright"] = v
+		}
+		se.sealSend(welcome)
 		log.Printf("paired with a phone")
 		emit("event", "paired")
 	case "mv":
@@ -153,6 +178,8 @@ func (se *Session) Handle(frame string) {
 		se.inj.TypeStr(c.S)
 	case "media":
 		se.inj.Media(c.K)
+	case "bright":
+		se.setBrightness(c.V)
 	case "view":
 		if c.On {
 			se.startStream(c.FPS, c.Q, c.Scale, c.D)
@@ -195,6 +222,44 @@ func (se *Session) moveAbs(nx, ny float64) {
 		y = 0
 	}
 	se.inj.MoveAbs(ox+x, oy+y)
+}
+
+// setBrightness applies a slider value. Setting brightness shells out to an
+// OS tool (tens to hundreds of ms), and a dragged slider fires many updates —
+// a latest-wins worker keeps the read loop unblocked and skips stale values.
+func (se *Session) setBrightness(v int) {
+	if !se.br.Available() {
+		return
+	}
+	if v < brightMin {
+		v = brightMin
+	}
+	if v > 100 {
+		v = 100
+	}
+	se.mu.Lock()
+	se.brightWant = v
+	if se.brightBusy {
+		se.mu.Unlock()
+		return
+	}
+	se.brightBusy = true
+	se.mu.Unlock()
+	go func() {
+		applied := -1
+		for {
+			se.mu.Lock()
+			want := se.brightWant
+			if want == applied {
+				se.brightBusy = false
+				se.mu.Unlock()
+				return
+			}
+			se.mu.Unlock()
+			se.br.Set(want)
+			applied = want
+		}
+	}()
 }
 
 // startStream begins (or, if already running, retunes) the live screen

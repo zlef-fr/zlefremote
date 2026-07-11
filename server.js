@@ -29,7 +29,7 @@ function distHave() {
 }
 
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
-const AGENT_VERSION = '1.3.0';
+const AGENT_VERSION = '1.4.0';
 const AGENT_ASSETS = {
   'linux-amd64': 'zlefremote-agent-linux-amd64',
   'windows-amd64': 'zlefremote-agent-windows-amd64.exe',

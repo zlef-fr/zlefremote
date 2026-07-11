@@ -18,13 +18,13 @@ import (
 // its saved key, so a remembered phone reconnects to the same address without a
 // new QR. The pairing URL then carries &p=1, telling the phone this device is
 // reconnectable and can be saved.
-func runRelay(sealer *Sealer, inj Injector, scr Screener, key []byte, keyB64, relayHost string, persistent bool) error {
+func runRelay(sealer *Sealer, inj Injector, scr Screener, br Brightener, key []byte, keyB64, relayHost string, persistent bool) error {
 	desiredRoom := ""
 	if persistent {
 		desiredRoom = deriveRoom(key)
 	}
 	for {
-		err := relayOnce(sealer, inj, scr, keyB64, relayHost, desiredRoom, persistent)
+		err := relayOnce(sealer, inj, scr, br, keyB64, relayHost, desiredRoom, persistent)
 		if errors.Is(err, errRoomTaken) {
 			// stable room unavailable (collision) — degrade to a random room.
 			desiredRoom, persistent = "", false
@@ -43,7 +43,7 @@ func runRelay(sealer *Sealer, inj Injector, scr Screener, key []byte, keyB64, re
 
 var errRoomTaken = errors.New("room_taken")
 
-func relayOnce(sealer *Sealer, inj Injector, scr Screener, keyB64, relayHost, desiredRoom string, persistent bool) error {
+func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, keyB64, relayHost, desiredRoom string, persistent bool) error {
 	ctx := context.Background()
 	wsURL := "wss://" + relayHost + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
@@ -129,7 +129,7 @@ func relayOnce(sealer *Sealer, inj Injector, scr Screener, keyB64, relayHost, de
 			se := sessions[f.From]
 			if se == nil {
 				id := f.From
-				se = NewSession(sealer, inj, scr, func(payload string) { writeData(id, payload) })
+				se = NewSession(sealer, inj, scr, br, func(payload string) { writeData(id, payload) })
 				sessions[f.From] = se
 			}
 			se.Handle(f.Payload)

@@ -1,7 +1,7 @@
 # Maintainer: ZlefRemote <hello@zlef.fr>
 pkgname=zlefremote-xfce-plugin
 pkgver=1.1.0
-pkgrel=7
+pkgrel=8
 pkgdesc="Start a ZlefRemote session and show the pairing QR straight from the Xfce panel — phone as wireless trackpad & keyboard"
 arch=('x86_64')
 url="https://remote.zlef.fr"
@@ -10,7 +10,7 @@ depends=('gtk3' 'xfce4-panel')
 makedepends=('gcc' 'make' 'pkgconf')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::https://remote.zlef.fr/download/zlefremote-xfce-plugin.tar.gz")
-sha256sums=('5e4247cd8a99720addea024dfc3872dde271d6726127972852f8f718d5e68bcd')
+sha256sums=('05b283cb5dedca3968589295c3c3e3c1109bac9970b1cef20cdb2b83aa576bc2')
 
 build() {
   cd "$srcdir/zlefremote-xfce-plugin"

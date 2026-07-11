@@ -50,7 +50,7 @@ func peerIP(r *http.Request) string {
 	return addr
 }
 
-func runLAN(sealer *Sealer, inj Injector, scr Screener, keyB64 string, port int) error {
+func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, keyB64 string, port int) error {
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, keyB64 string, port int)
 		// The screen-view stream pushes frames from a goroutine while the read
 		// loop may also reply — serialize writes to this phone's socket.
 		var wmu sync.Mutex
-		se := NewSession(sealer, inj, scr, func(payload string) {
+		se := NewSession(sealer, inj, scr, br, func(payload string) {
 			out, _ := json.Marshal(frame{T: "data", Payload: payload})
 			wmu.Lock()
 			c.Write(ctx, websocket.MessageText, out)

@@ -24,6 +24,21 @@ Two pieces:
 2. It prints a QR code (and a URL). Scan it with your phone.
 3. The phone becomes a trackpad + keyboard + media remote — and a **live screen**.
 
+### Display brightness
+
+The Media tab shows a **screen-brightness slider** when the computer exposes a
+controllable backlight. Backends, probed at agent startup:
+
+- **Linux** — `brightnessctl` (X11/Wayland laptops), direct
+  `/sys/class/backlight` write, or `xrandr` software gamma (desktops), in that
+  order of preference.
+- **Windows** — WMI (`WmiMonitorBrightness`), i.e. laptops and monitors whose
+  driver exposes a backlight.
+- **macOS** — the `brightness` CLI (`brew install brightness`).
+
+If none is usable the slider simply doesn't appear. Brightness never goes below
+5% so a remote slip can't black the screen out.
+
 ### Live screen view
 
 Open the **Screen** tab on the phone to see the computer's screen in real time
