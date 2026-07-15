@@ -37,6 +37,21 @@ package main
 #include <stdlib.h>
 #include <unistd.h>
 
+// Some code points live on layouts as LEGACY keysyms whose value differs from
+// both Latin-1 and the 0x01000000|cp Unicode form — e.g. AZERTY binds € as
+// EuroSign (0x20ac) and œ as oe (0x13bd). Without this table those chars miss
+// the direct-keymap lookup and fall back to the racy spare-keycode remap.
+// Full set needed for French; extend if a layout's char still falls back.
+static KeySym zr_legacy(unsigned int cp) {
+	switch (cp) {
+	case 0x20ac: return 0x20ac;  // € EuroSign
+	case 0x0153: return 0x13bd;  // œ oe
+	case 0x0152: return 0x13bc;  // Œ OE
+	case 0x0178: return 0x13be;  // Ÿ Ydiaeresis
+	}
+	return NoSymbol;
+}
+
 // Column → modifier convention of the core keymap (what xmodmap -pke shows):
 //   col 0: none          col 1: Shift
 //   col 2: Mode_switch   col 3: Shift+Mode_switch   (group 2)
@@ -117,6 +132,11 @@ static void zr_type_runes(unsigned int *cps, int n) {
 
 		int col = 0;
 		KeyCode kc = zr_find(km, min_kc, max_kc, per, sym, &col);
+		if (!kc && cp > 0xff) {
+			KeySym legacy = zr_legacy(cp);
+			if (legacy != NoSymbol)
+				kc = zr_find(km, min_kc, max_kc, per, legacy, &col);
+		}
 		if (kc && kc != (KeyCode)spare) {
 			zr_press(dpy, kc, col, kc_shift, kc_altgr, kc_mode);
 			continue;
