@@ -18,6 +18,9 @@ import (
 //  2. sysfs         — direct /sys/class/backlight write (root / video group).
 //  3. xrandr        — software gamma on every connected output; the only
 //     option for desktops with external monitors (X11 only).
+//
+// Each backend is per-display: it enumerates its devices/outputs so the phone
+// can target one screen, and Set(-1, pct) fans out to all of them.
 func newBrightener() Brightener {
 	if b := probeBrightnessctl(); b != nil {
 		return b
@@ -35,53 +38,84 @@ const brightTimeout = 3 * time.Second
 
 // ── brightnessctl ──────────────────────────────────────────────────────────
 
-type ctlBright struct{}
+type ctlBright struct {
+	devs []string // backlight device names, one per screen
+}
 
 // probeBrightnessctl accepts only if a backlight-class device exists (the
 // tool also lists keyboard LEDs, which are not the screen).
 func probeBrightnessctl() Brightener {
-	out, err := runOut(brightTimeout, "brightnessctl", "-m", "-c", "backlight")
+	// machine-readable list: device,class,current,percent%,max per line
+	out, err := runOut(brightTimeout, "brightnessctl", "-m", "-l", "-c", "backlight")
 	if err != nil || out == "" {
 		return nil
 	}
-	if _, ok := (ctlBright{}).Get(); !ok {
+	b := &ctlBright{}
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Split(line, ","); len(f) >= 5 && f[1] == "backlight" && f[0] != "" {
+			b.devs = append(b.devs, f[0])
+		}
+	}
+	if len(b.devs) == 0 {
 		return nil
 	}
-	return ctlBright{}
+	if b.Screens()[0].Pct < 0 {
+		return nil
+	}
+	return b
 }
 
-func (ctlBright) Available() bool { return true }
+func (b *ctlBright) Available() bool { return true }
 
-func (ctlBright) Get() (int, bool) {
+func (b *ctlBright) Screens() []BrightScreen {
+	out := make([]BrightScreen, len(b.devs))
+	for i, d := range b.devs {
+		out[i] = BrightScreen{Name: d, Pct: ctlGet(d)}
+	}
+	return out
+}
+
+// ctlGet reads one device's current percent (-1 on failure).
+func ctlGet(dev string) int {
 	// machine-readable: device,class,current,percent%,max
-	out, err := runOut(brightTimeout, "brightnessctl", "-m", "-c", "backlight")
+	out, err := runOut(brightTimeout, "brightnessctl", "-m", "-d", dev, "-c", "backlight")
 	if err != nil {
-		return 0, false
+		return -1
 	}
 	f := strings.Split(strings.SplitN(out, "\n", 2)[0], ",")
 	if len(f) < 4 {
-		return 0, false
+		return -1
 	}
 	pct, err := strconv.Atoi(strings.TrimSuffix(f[3], "%"))
 	if err != nil {
-		return 0, false
+		return -1
 	}
-	return pct, true
+	return pct
 }
 
-func (ctlBright) Set(pct int) {
-	runOut(brightTimeout, "brightnessctl", "-q", "-c", "backlight", "set", fmt.Sprintf("%d%%", pct))
+func (b *ctlBright) Set(display, pct int) {
+	for i, d := range b.devs {
+		if display >= 0 && i != display {
+			continue
+		}
+		runOut(brightTimeout, "brightnessctl", "-q", "-d", d, "-c", "backlight", "set", fmt.Sprintf("%d%%", pct))
+	}
 }
 
 // ── sysfs ──────────────────────────────────────────────────────────────────
 
-type sysfsBright struct {
+type sysfsDev struct {
 	dir string
 	max int
 }
 
+type sysfsBright struct {
+	devs []sysfsDev
+}
+
 func probeSysfs() Brightener {
 	dirs, _ := filepath.Glob("/sys/class/backlight/*")
+	b := &sysfsBright{}
 	for _, d := range dirs {
 		max := readSysInt(filepath.Join(d, "max_brightness"))
 		if max <= 0 {
@@ -93,9 +127,12 @@ func probeSysfs() Brightener {
 			continue
 		}
 		f.Close()
-		return &sysfsBright{dir: d, max: max}
+		b.devs = append(b.devs, sysfsDev{dir: d, max: max})
 	}
-	return nil
+	if len(b.devs) == 0 {
+		return nil
+	}
+	return b
 }
 
 func readSysInt(path string) int {
@@ -112,20 +149,29 @@ func readSysInt(path string) int {
 
 func (s *sysfsBright) Available() bool { return true }
 
-func (s *sysfsBright) Get() (int, bool) {
-	cur := readSysInt(filepath.Join(s.dir, "brightness"))
-	if cur < 0 {
-		return 0, false
+func (s *sysfsBright) Screens() []BrightScreen {
+	out := make([]BrightScreen, len(s.devs))
+	for i, d := range s.devs {
+		pct := -1
+		if cur := readSysInt(filepath.Join(d.dir, "brightness")); cur >= 0 {
+			pct = (cur*100 + d.max/2) / d.max
+		}
+		out[i] = BrightScreen{Name: filepath.Base(d.dir), Pct: pct}
 	}
-	return (cur*100 + s.max/2) / s.max, true
+	return out
 }
 
-func (s *sysfsBright) Set(pct int) {
-	raw := (pct*s.max + 50) / 100
-	if raw < 1 {
-		raw = 1
+func (s *sysfsBright) Set(display, pct int) {
+	for i, d := range s.devs {
+		if display >= 0 && i != display {
+			continue
+		}
+		raw := (pct*d.max + 50) / 100
+		if raw < 1 {
+			raw = 1
+		}
+		os.WriteFile(filepath.Join(d.dir, "brightness"), []byte(strconv.Itoa(raw)), 0)
 	}
-	os.WriteFile(filepath.Join(s.dir, "brightness"), []byte(strconv.Itoa(raw)), 0)
 }
 
 // ── xrandr (software gamma) ────────────────────────────────────────────────
@@ -133,7 +179,7 @@ func (s *sysfsBright) Set(pct int) {
 type xrandrBright struct {
 	mu      sync.Mutex
 	outputs []string
-	last    int // xrandr has no cheap "get", so remember what we set
+	last    []int // xrandr has no cheap "get", so remember what we set (per output)
 }
 
 func probeXrandr() Brightener {
@@ -144,14 +190,15 @@ func probeXrandr() Brightener {
 	if err != nil {
 		return nil
 	}
-	x := &xrandrBright{last: -1}
+	x := &xrandrBright{}
 	for _, line := range strings.Split(out, "\n") {
 		if f := strings.Fields(line); len(f) >= 2 && f[1] == "connected" {
 			x.outputs = append(x.outputs, f[0])
-		} else if x.last < 0 && len(x.outputs) > 0 && strings.HasPrefix(strings.TrimSpace(line), "Brightness:") {
-			// first connected output's current software gamma
+			x.last = append(x.last, -1)
+		} else if n := len(x.outputs); n > 0 && x.last[n-1] < 0 && strings.HasPrefix(strings.TrimSpace(line), "Brightness:") {
+			// current software gamma of the output being described
 			if v, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "Brightness:")), 64); err == nil {
-				x.last = int(v*100 + 0.5)
+				x.last[n-1] = int(v*100 + 0.5)
 			}
 		}
 	}
@@ -163,22 +210,29 @@ func probeXrandr() Brightener {
 
 func (x *xrandrBright) Available() bool { return true }
 
-func (x *xrandrBright) Get() (int, bool) {
+func (x *xrandrBright) Screens() []BrightScreen {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	if x.last < 0 {
-		return 0, false
+	out := make([]BrightScreen, len(x.outputs))
+	for i, o := range x.outputs {
+		out[i] = BrightScreen{Name: o, Pct: x.last[i]}
 	}
-	return x.last, true
+	return out
 }
 
-func (x *xrandrBright) Set(pct int) {
+func (x *xrandrBright) Set(display, pct int) {
 	v := fmt.Sprintf("%.2f", float64(pct)/100)
 	x.mu.Lock()
-	outputs := append([]string(nil), x.outputs...)
-	x.last = pct
+	var targets []string
+	for i, o := range x.outputs {
+		if display >= 0 && i != display {
+			continue
+		}
+		targets = append(targets, o)
+		x.last[i] = pct
+	}
 	x.mu.Unlock()
-	for _, o := range outputs {
+	for _, o := range targets {
 		runOut(brightTimeout, "xrandr", "--output", o, "--brightness", v)
 	}
 }

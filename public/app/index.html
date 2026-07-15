@@ -17,7 +17,7 @@
 <link rel="manifest" href="/app.webmanifest">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=9">
+<link rel="stylesheet" href="/app/css/client.css?v=10">
 <!-- InstallKit: accurate per-device "install this PWA" steps. mode=manual → no
      floating FAB; the home screen's Install button calls InstallKit.open(). -->
 <script defer src="https://installkit.zlef.fr/v1/install-kit.js"
@@ -124,6 +124,8 @@
         <span class="br-l" id="lblBright"></span>
         <span class="br-val" id="brightVal">—</span>
       </div>
+      <!-- per-screen target chips — only when the host has >1 adjustable screen -->
+      <div class="bright-mon" id="brightMon" role="group" hidden></div>
       <div class="bright-row">
         <span class="br-end" data-ico="sundim"></span>
         <input type="range" class="bright-slider" id="bright" min="5" max="100" step="1" value="70" aria-label="brightness">
@@ -184,14 +186,14 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="/app/js/icons.js?v=4"></script>
-<script src="/app/js/i18n.js?v=6"></script>
+<script src="/app/js/i18n.js?v=7"></script>
 <script src="/app/js/crypto.js?v=2"></script>
 <script src="/app/js/conn.js?v=2"></script>
 <script src="/app/js/input.js?v=2"></script>
 <script src="/app/js/home.js?v=3"></script>
 <script src="/app/js/media-session.js?v=1"></script>
 <script src="/app/js/screen.js?v=3"></script>
-<script src="/app/js/app.js?v=8"></script>
+<script src="/app/js/app.js?v=9"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

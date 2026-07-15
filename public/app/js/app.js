@@ -158,6 +158,7 @@
       // brightness slider — only for agents whose host exposes a backlight
       const canBright = !!(c.cap && c.cap.bright);
       $('brightWrap').hidden = !canBright;
+      buildBrightMon(canBright ? c.brights : null);
       if (canBright && typeof c.bright === 'number') setBrightUI(c.bright);
       // remember persistent computers so they reconnect from Home in one tap
       if (ZRConn.isPersistent()) {
@@ -382,11 +383,37 @@
   // Dragging fires many input events while the agent shells out to an OS tool
   // per value — throttle to a trailing send so the last position always lands.
   $('lblBright').textContent = t('brightness');
-  const brightEl = $('bright'), brightVal = $('brightVal');
+  const brightEl = $('bright'), brightVal = $('brightVal'), brightMonEl = $('brightMon');
   function setBrightUI(v) {
     v = Math.max(5, Math.min(100, Math.round(v)));
     brightEl.value = v;
     brightVal.textContent = v + '%';
+  }
+  // per-screen target: brScreens = welcome's brights list (kept current locally
+  // as we send), brSel = chip selection (-1 = all screens)
+  let brScreens = null, brSel = -1;
+  function buildBrightMon(list) {
+    brightMonEl.innerHTML = ''; brSel = -1;
+    brScreens = (list && list.length > 1) ? list : null;
+    brightMonEl.hidden = !brScreens;
+    if (!brScreens) return;
+    const chips = [[-1, t('bright_all')]];
+    brScreens.forEach((s, i) => chips.push([i, s.name || `${t('bright_screen')} ${i + 1}`]));
+    chips.forEach(([idx, label]) => {
+      const b = document.createElement('button');
+      b.className = 'brmon' + (idx === -1 ? ' active' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        if (brSel === idx) return;
+        brSel = idx;
+        brightMonEl.querySelectorAll('.brmon').forEach((x) => x.classList.toggle('active', x === b));
+        // snap the slider to the selected screen's last-known level
+        const v = brSel >= 0 ? brScreens[brSel].v : brScreens[0].v;
+        if (typeof v === 'number' && v >= 0) setBrightUI(v);
+        vibrate(6);
+      });
+      brightMonEl.appendChild(b);
+    });
   }
   let brTimer = null, brSentAt = 0;
   function sendBright() {
@@ -398,7 +425,13 @@
       return;
     }
     brSentAt = now; clearTimeout(brTimer); brTimer = null;
-    send({ t: 'bright', v: +brightEl.value });
+    const v = +brightEl.value;
+    send({ t: 'bright', v, bd: brSel });
+    // remember what each screen was set to, so chip switches snap correctly
+    if (brScreens) {
+      if (brSel >= 0) brScreens[brSel].v = v;
+      else brScreens.forEach((s) => { s.v = v; });
+    }
   }
   brightEl.addEventListener('input', sendBright);
   brightEl.addEventListener('change', () => { sendBright(); vibrate(8); });

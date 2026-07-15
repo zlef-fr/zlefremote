@@ -50,8 +50,20 @@ type DisplayInfo struct {
 // startup; when false the phone hides its brightness slider.
 type Brightener interface {
 	Available() bool
-	Get() (pct int, ok bool) // current brightness, 0..100
-	Set(pct int)             // apply brightness, 0..100 (already clamped)
+	// Screens enumerates the adjustable displays. At least one entry when
+	// Available; nil otherwise. Pct is the current level (0..100, -1 unknown).
+	Screens() []BrightScreen
+	// Set applies pct (0..100, already clamped) to one display (index into
+	// Screens) or to every display (display == -1).
+	Set(display, pct int)
+}
+
+// BrightScreen is one brightness-adjustable display: an optional human label
+// (backlight device, xrandr output, monitor id — "" lets the phone number it)
+// and its current level.
+type BrightScreen struct {
+	Name string
+	Pct  int // 0..100, -1 when unknown
 }
 
 // Brightness floor: 0 turns some backlights/gamma fully black, which would
@@ -77,6 +89,7 @@ type cmd struct {
 	Scale  int      `json:"scale"` // view: capture scale (percent of native)
 	D      int      `json:"d"`     // view: display index (multi-monitor)
 	V      int      `json:"v"`     // bright: target brightness percent
+	BD     *int     `json:"bd"`    // bright: target display index; nil/-1 = all screens
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -101,8 +114,8 @@ type Session struct {
 	fps, quality, scale int
 	display             int // which monitor is streamed / abs-pointer target
 	frameID             uint32
-	brightWant          int  // latest requested brightness
-	brightBusy          bool // a worker goroutine is applying brightness
+	brightWant          map[int]int // display (-1 = all) → latest requested brightness
+	brightBusy          bool        // a worker goroutine is applying brightness
 }
 
 func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, send func(string)) *Session {
@@ -151,8 +164,18 @@ func (se *Session) Handle(frame string) {
 				"bright": se.br.Available(),
 			},
 		}
-		if v, ok := se.br.Get(); ok {
-			welcome["bright"] = v
+		if bs := se.br.Screens(); len(bs) > 0 {
+			if bs[0].Pct >= 0 {
+				welcome["bright"] = bs[0].Pct
+			}
+			// per-screen list only when there is a choice to make
+			if len(bs) > 1 {
+				list := make([]map[string]any, 0, len(bs))
+				for _, s := range bs {
+					list = append(list, map[string]any{"name": s.Name, "v": s.Pct})
+				}
+				welcome["brights"] = list
+			}
 		}
 		se.sealSend(welcome)
 		log.Printf("paired with a phone")
@@ -179,7 +202,7 @@ func (se *Session) Handle(frame string) {
 	case "media":
 		se.inj.Media(c.K)
 	case "bright":
-		se.setBrightness(c.V)
+		se.setBrightness(c.V, c.BD)
 	case "view":
 		if c.On {
 			se.startStream(c.FPS, c.Q, c.Scale, c.D)
@@ -224,10 +247,11 @@ func (se *Session) moveAbs(nx, ny float64) {
 	se.inj.MoveAbs(ox+x, oy+y)
 }
 
-// setBrightness applies a slider value. Setting brightness shells out to an
-// OS tool (tens to hundreds of ms), and a dragged slider fires many updates —
-// a latest-wins worker keeps the read loop unblocked and skips stale values.
-func (se *Session) setBrightness(v int) {
+// setBrightness applies a slider value to one display (bd) or all (nil/-1).
+// Setting brightness shells out to an OS tool (tens to hundreds of ms), and a
+// dragged slider fires many updates — a latest-wins-per-display worker keeps
+// the read loop unblocked and skips stale values.
+func (se *Session) setBrightness(v int, bd *int) {
 	if !se.br.Available() {
 		return
 	}
@@ -237,8 +261,22 @@ func (se *Session) setBrightness(v int) {
 	if v > 100 {
 		v = 100
 	}
+	target := -1
+	if bd != nil && *bd >= 0 {
+		if *bd < len(se.br.Screens()) {
+			target = *bd
+		} // out of range → all, same spirit as the view fallback
+	}
 	se.mu.Lock()
-	se.brightWant = v
+	if target == -1 {
+		// a whole-desktop set supersedes any queued per-screen values
+		se.brightWant = map[int]int{-1: v}
+	} else {
+		if se.brightWant == nil {
+			se.brightWant = map[int]int{}
+		}
+		se.brightWant[target] = v
+	}
 	if se.brightBusy {
 		se.mu.Unlock()
 		return
@@ -246,18 +284,25 @@ func (se *Session) setBrightness(v int) {
 	se.brightBusy = true
 	se.mu.Unlock()
 	go func() {
-		applied := -1
 		for {
 			se.mu.Lock()
-			want := se.brightWant
-			if want == applied {
+			// drain "all" first so a per-screen tweak queued after it wins
+			tgt, ok := -1, false
+			if _, ok = se.brightWant[-1]; !ok {
+				for k := range se.brightWant {
+					tgt, ok = k, true
+					break
+				}
+			}
+			if !ok {
 				se.brightBusy = false
 				se.mu.Unlock()
 				return
 			}
+			want := se.brightWant[tgt]
+			delete(se.brightWant, tgt)
 			se.mu.Unlock()
-			se.br.Set(want)
-			applied = want
+			se.br.Set(tgt, want)
 		}
 	}()
 }
