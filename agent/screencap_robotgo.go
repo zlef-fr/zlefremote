@@ -9,6 +9,7 @@ import (
 	"log"
 
 	"github.com/go-vgo/robotgo"
+	"github.com/vcaesar/screenshot"
 	xdraw "golang.org/x/image/draw"
 )
 
@@ -16,6 +17,17 @@ import (
 // robotgo (same tag as real input) — it needs a display, which robotgo already
 // requires, so view and control light up together. The stub build reports
 // unavailable and the phone hides the Screen tab.
+//
+// Capture goes through vcaesar/screenshot's CaptureDisplay, NOT
+// robotgo.CaptureImg: robotgo's X11 path hands the rect raw to XGetImage on
+// the root window, but GetDisplayBounds coords are relative to the PRIMARY
+// display's origin — on layouts where the primary isn't at the root origin
+// (second monitor left of / above the primary) the rect lands outside the
+// root and Xlib's default error handler kills the process with
+// "BadMatch (X_GetImage)". CaptureDisplay uses the same coordinate system as
+// its own bounds, intersects with the root and pads, so it can't BadMatch —
+// and per-display capture also means display 0 is display 0, not the whole
+// virtual desktop.
 type rgScreen struct{}
 
 func newScreener() Screener {
@@ -25,23 +37,18 @@ func newScreener() Screener {
 
 func (rgScreen) Available() bool { return true }
 
-// Displays enumerates monitors (global desktop coordinates). Xinerama can be
-// absent (headless Xvfb, odd servers) → DisplaysNum reports 0; fall back to a
-// single display covering the primary screen so view/control keep working.
+// Displays enumerates monitors in GLOBAL desktop coordinates (what
+// Injector.MoveAbs expects). Per-OS displayBounds() — on Linux raw Xinerama
+// (see displays_robotgo_linux.go), elsewhere vcaesar/screenshot, which is
+// already global there. Xinerama can be absent (headless Xvfb, odd servers)
+// → fall back to a single display covering the primary screen so
+// view/control keep working.
 func (rgScreen) Displays() []DisplayInfo {
-	n := robotgo.DisplaysNum()
-	var out []DisplayInfo
-	for i := 0; i < n; i++ {
-		x, y, w, h := robotgo.GetDisplayBounds(i)
-		if w > 0 && h > 0 {
-			out = append(out, DisplayInfo{X: x, Y: y, W: w, H: h})
-		}
+	if out := displayBounds(); len(out) > 0 {
+		return out
 	}
-	if len(out) == 0 {
-		w, h := robotgo.GetScreenSize()
-		out = []DisplayInfo{{X: 0, Y: 0, W: w, H: h}}
-	}
-	return out
+	w, h := robotgo.GetScreenSize()
+	return []DisplayInfo{{X: 0, Y: 0, W: w, H: h}}
 }
 
 // Capture grabs one display (by index into Displays), downscales it to
@@ -52,12 +59,13 @@ func (s rgScreen) Capture(display, scalePct, quality int) ([]byte, int, int, err
 		src image.Image
 		err error
 	)
-	ds := s.Displays()
-	if display > 0 && display < len(ds) {
-		d := ds[display]
-		src, err = robotgo.CaptureImg(d.X, d.Y, d.W, d.H)
+	if n := screenshot.NumActiveDisplays(); n > 0 {
+		if display < 0 || display >= n {
+			display = 0
+		}
+		src, err = screenshot.CaptureDisplay(display)
 	} else {
-		// display 0 (or out of range): the primary — same as the historical path
+		// No Xinerama (headless Xvfb): the historical whole-screen path.
 		src, err = robotgo.CaptureImg()
 	}
 	if err != nil {
