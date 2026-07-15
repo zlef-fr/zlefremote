@@ -20,6 +20,6 @@ func runOut(timeout time.Duration, name string, args ...string) (string, error) 
 // noBright is the "unsupported" brightener (no usable backend was found).
 type noBright struct{}
 
-func (noBright) Available() bool  { return false }
-func (noBright) Get() (int, bool) { return 0, false }
-func (noBright) Set(int)          {}
+func (noBright) Available() bool         { return false }
+func (noBright) Screens() []BrightScreen { return nil }
+func (noBright) Set(int, int)            {}

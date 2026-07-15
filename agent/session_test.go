@@ -62,36 +62,46 @@ func (f *fakeScreen) capturedDisplays() []int {
 	return append([]int(nil), f.captured...)
 }
 
+// two brightness-adjustable screens, like a laptop panel + external monitor
 type fakeBright struct {
 	mu    sync.Mutex
 	avail bool
-	cur   int
-	sets  []int // every Set call, in order
+	cur   [2]int
+	sets  [][2]int // every Set call as (display, pct), in order
 	slow  time.Duration
 }
 
 func (f *fakeBright) Available() bool { return f.avail }
-func (f *fakeBright) Get() (int, bool) {
+func (f *fakeBright) Screens() []BrightScreen {
 	if !f.avail {
-		return 0, false
+		return nil
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.cur, true
+	return []BrightScreen{{Name: "eDP-1", Pct: f.cur[0]}, {Name: "HDMI-1", Pct: f.cur[1]}}
 }
-func (f *fakeBright) Set(pct int) {
+func (f *fakeBright) Set(display, pct int) {
 	if f.slow > 0 {
 		time.Sleep(f.slow)
 	}
 	f.mu.Lock()
-	f.cur = pct
-	f.sets = append(f.sets, pct)
+	for i := range f.cur {
+		if display < 0 || display == i {
+			f.cur[i] = pct
+		}
+	}
+	f.sets = append(f.sets, [2]int{display, pct})
 	f.mu.Unlock()
 }
-func (f *fakeBright) setCalls() []int {
+func (f *fakeBright) levels() [2]int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]int(nil), f.sets...)
+	return f.cur
+}
+func (f *fakeBright) setCalls() [][2]int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][2]int(nil), f.sets...)
 }
 
 // harness ──────────────────────────────────────────────────────────────────────
@@ -113,7 +123,7 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}, br: &fakeBright{avail: true, cur: 70}}
+	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}, br: &fakeBright{avail: true, cur: [2]int{70, 40}}}
 	h.se = NewSession(sealer, h.inj, h.scr, h.br, func(sealed string) {
 		pt, err := sealer.Open(sealed)
 		if err != nil {
@@ -233,6 +243,19 @@ func TestWelcomeCarriesBrightness(t *testing.T) {
 	if v, _ := w["bright"].(float64); v != 70 {
 		t.Fatalf("welcome.bright: want 70, got %#v", w["bright"])
 	}
+	// per-screen list: two screens with names and current levels
+	bs, _ := w["brights"].([]any)
+	if len(bs) != 2 {
+		t.Fatalf("welcome.brights: want 2 entries, got %#v", w["brights"])
+	}
+	s0 := bs[0].(map[string]any)
+	s1 := bs[1].(map[string]any)
+	if s0["name"] != "eDP-1" || s0["v"].(float64) != 70 {
+		t.Fatalf("brights[0]: got %#v", s0)
+	}
+	if s1["name"] != "HDMI-1" || s1["v"].(float64) != 40 {
+		t.Fatalf("brights[1]: got %#v", s1)
+	}
 }
 
 func TestWelcomeHidesBrightnessWhenUnavailable(t *testing.T) {
@@ -256,14 +279,28 @@ func TestWelcomeHidesBrightnessWhenUnavailable(t *testing.T) {
 
 func TestBrightSetsAndClamps(t *testing.T) {
 	h := newHarness(t)
+	// no bd (old client) → every screen
 	h.sendCmd(t, map[string]any{"t": "bright", "v": 60})
-	waitFor(t, func() bool { v, _ := h.br.Get(); return v == 60 })
+	waitFor(t, func() bool { return h.br.levels() == [2]int{60, 60} })
 	// floor: never black the screen out
 	h.sendCmd(t, map[string]any{"t": "bright", "v": 0})
-	waitFor(t, func() bool { v, _ := h.br.Get(); return v == brightMin })
+	waitFor(t, func() bool { return h.br.levels() == [2]int{brightMin, brightMin} })
 	// ceiling
 	h.sendCmd(t, map[string]any{"t": "bright", "v": 250})
-	waitFor(t, func() bool { v, _ := h.br.Get(); return v == 100 })
+	waitFor(t, func() bool { return h.br.levels() == [2]int{100, 100} })
+}
+
+func TestBrightPerScreen(t *testing.T) {
+	h := newHarness(t)
+	// target only the second screen; the first keeps its level
+	h.sendCmd(t, map[string]any{"t": "bright", "v": 25, "bd": 1})
+	waitFor(t, func() bool { return h.br.levels() == [2]int{70, 25} })
+	// explicit -1 = all screens
+	h.sendCmd(t, map[string]any{"t": "bright", "v": 80, "bd": -1})
+	waitFor(t, func() bool { return h.br.levels() == [2]int{80, 80} })
+	// out-of-range index falls back to all (same spirit as the view fallback)
+	h.sendCmd(t, map[string]any{"t": "bright", "v": 33, "bd": 7})
+	waitFor(t, func() bool { return h.br.levels() == [2]int{33, 33} })
 }
 
 func TestBrightLatestWinsUnderBurst(t *testing.T) {
@@ -272,11 +309,20 @@ func TestBrightLatestWinsUnderBurst(t *testing.T) {
 	for v := 10; v <= 90; v += 5 {
 		h.sendCmd(t, map[string]any{"t": "bright", "v": v})
 	}
-	waitFor(t, func() bool { v, _ := h.br.Get(); return v == 90 })
+	waitFor(t, func() bool { return h.br.levels() == [2]int{90, 90} })
 	// the worker must have skipped stale intermediate values, not queued all 17
 	if calls := h.br.setCalls(); len(calls) >= 17 {
 		t.Fatalf("burst not coalesced: %d Set calls (%v)", len(calls), calls)
 	}
+}
+
+func TestBrightPerScreenBurstKeepsBothTargets(t *testing.T) {
+	h := newHarness(t)
+	h.br.slow = 20 * time.Millisecond
+	// a per-screen tweak right after an all-set must not be dropped by coalescing
+	h.sendCmd(t, map[string]any{"t": "bright", "v": 50, "bd": -1})
+	h.sendCmd(t, map[string]any{"t": "bright", "v": 20, "bd": 0})
+	waitFor(t, func() bool { return h.br.levels() == [2]int{20, 50} })
 }
 
 func waitFor(t *testing.T, cond func() bool) {
