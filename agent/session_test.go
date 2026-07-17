@@ -256,6 +256,142 @@ func TestWelcomeCarriesBrightness(t *testing.T) {
 	if s1["name"] != "HDMI-1" || s1["v"].(float64) != 40 {
 		t.Fatalf("brights[1]: got %#v", s1)
 	}
+	// a single-mechanism brightener (no BackendChooser) advertises no choice
+	if _, present := w["backends"]; present {
+		t.Fatalf("welcome.backends should be absent without a BackendChooser, got %#v", w["backends"])
+	}
+}
+
+// fakeSwitchBright implements Brightener + BackendChooser. Its screen list
+// changes with the active backend — a hardware backlight exposes the single
+// laptop panel, xrandr exposes two outputs — so the switch reply must re-sync.
+type fakeSwitchBright struct {
+	mu     sync.Mutex
+	active string
+}
+
+func (f *fakeSwitchBright) Available() bool { return true }
+func (f *fakeSwitchBright) Screens() []BrightScreen {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.active == "xrandr" {
+		return []BrightScreen{{Name: "eDP", Pct: 47}, {Name: "DP-0", Pct: 100}}
+	}
+	return []BrightScreen{{Name: "amdgpu_bl0", Pct: 30}}
+}
+func (f *fakeSwitchBright) Set(display, pct int) {}
+func (f *fakeSwitchBright) Backends() []BrightBackend {
+	return []BrightBackend{
+		{ID: "sysfs", Label: "Backlight (sysfs)", Kind: "hardware"},
+		{ID: "xrandr", Label: "Software dimming (xrandr)", Kind: "software"},
+	}
+}
+func (f *fakeSwitchBright) Active() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.active
+}
+func (f *fakeSwitchBright) Select(id string) bool {
+	if id != "sysfs" && id != "xrandr" {
+		return false
+	}
+	f.mu.Lock()
+	f.active = id
+	f.mu.Unlock()
+	return true
+}
+
+// newHarnessBr is newHarness with a caller-supplied Brightener (h.br is left
+// nil — the chooser tests read frames, not the typed fake's counters).
+func newHarnessBr(t *testing.T, br Brightener) *harness {
+	t.Helper()
+	key, _ := NewKey()
+	sealer, err := NewSealer(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}}
+	h.se = NewSession(sealer, h.inj, h.scr, br, func(sealed string) {
+		pt, err := sealer.Open(sealed)
+		if err != nil {
+			t.Errorf("agent pushed an unopenable frame: %v", err)
+			return
+		}
+		var m map[string]any
+		if json.Unmarshal(pt, &m) != nil {
+			t.Errorf("agent pushed non-JSON: %s", pt)
+			return
+		}
+		h.mu.Lock()
+		h.out = append(h.out, m)
+		h.mu.Unlock()
+	})
+	return h
+}
+
+func TestWelcomeListsBrightnessBackends(t *testing.T) {
+	h := newHarnessBr(t, &fakeSwitchBright{active: "sysfs"})
+	h.sendCmd(t, map[string]any{"t": "hello"})
+	w := h.frames("welcome")[0]
+	if w["backend"] != "sysfs" {
+		t.Fatalf("welcome.backend: want sysfs (default), got %#v", w["backend"])
+	}
+	bs, _ := w["backends"].([]any)
+	if len(bs) != 2 {
+		t.Fatalf("welcome.backends: want 2 entries, got %#v", w["backends"])
+	}
+	b0 := bs[0].(map[string]any)
+	b1 := bs[1].(map[string]any)
+	if b0["id"] != "sysfs" || b0["kind"] != "hardware" {
+		t.Fatalf("backends[0]: got %#v", b0)
+	}
+	if b1["id"] != "xrandr" || b1["kind"] != "software" {
+		t.Fatalf("backends[1]: got %#v", b1)
+	}
+	// active backend is the single hardware panel → level only, no per-screen list
+	if v, _ := w["bright"].(float64); v != 30 {
+		t.Fatalf("welcome.bright: want 30 (sysfs panel), got %#v", w["bright"])
+	}
+	if _, present := w["brights"]; present {
+		t.Fatalf("single-screen backend must not carry brights, got %#v", w["brights"])
+	}
+}
+
+func TestBrightendSwitchesBackendAndResyncs(t *testing.T) {
+	f := &fakeSwitchBright{active: "sysfs"}
+	h := newHarnessBr(t, f)
+	h.sendCmd(t, map[string]any{"t": "hello"})
+	h.sendCmd(t, map[string]any{"t": "brightend", "be": "xrandr"})
+
+	rs := h.frames("brightend")
+	if len(rs) != 1 {
+		t.Fatalf("want 1 brightend reply, got %d", len(rs))
+	}
+	r := rs[0]
+	if r["backend"] != "xrandr" || f.Active() != "xrandr" {
+		t.Fatalf("switch to xrandr failed: reply=%#v active=%q", r["backend"], f.Active())
+	}
+	// reply carries the new backend's fresh screen list (2 xrandr outputs)
+	brights, _ := r["brights"].([]any)
+	if len(brights) != 2 {
+		t.Fatalf("switch reply should carry xrandr's 2 outputs, got %#v", r["brights"])
+	}
+	if v, _ := r["bright"].(float64); v != 47 {
+		t.Fatalf("switch reply bright: want 47 (eDP), got %#v", r["bright"])
+	}
+}
+
+func TestBrightendUnknownBackendIgnored(t *testing.T) {
+	f := &fakeSwitchBright{active: "sysfs"}
+	h := newHarnessBr(t, f)
+	h.sendCmd(t, map[string]any{"t": "hello"})
+	h.sendCmd(t, map[string]any{"t": "brightend", "be": "bogus"})
+	if rs := h.frames("brightend"); len(rs) != 0 {
+		t.Fatalf("unknown backend must not reply, got %#v", rs)
+	}
+	if f.Active() != "sysfs" {
+		t.Fatalf("unknown backend must not switch, active is now %q", f.Active())
+	}
 }
 
 func TestWelcomeHidesBrightnessWhenUnavailable(t *testing.T) {

@@ -66,6 +66,31 @@ type BrightScreen struct {
 	Pct  int // 0..100, -1 when unknown
 }
 
+// BackendChooser is an optional capability a Brightener may expose when the
+// host has more than one way to change brightness — on Linux a laptop can have
+// a real backlight (brightnessctl/sysfs) AND software gamma (xrandr), which
+// also dims external monitors. newBrightener() still picks the best default,
+// but a chooser lets the user switch "service" from the phone: hardware
+// backlight renders correctly, software gamma is washed out but reaches
+// external screens. Non-Linux backends have a single mechanism and don't
+// implement this, so the phone simply shows no chooser.
+type BackendChooser interface {
+	// Backends lists the available mechanisms, best-quality first. Two or more
+	// entries means there is a real choice to surface.
+	Backends() []BrightBackend
+	// Active is the ID of the mechanism currently driving the slider.
+	Active() string
+	// Select switches the active mechanism; false for an unknown ID (no change).
+	Select(id string) bool
+}
+
+// BrightBackend describes one brightness mechanism for the phone's chooser.
+type BrightBackend struct {
+	ID    string // stable key: "brightnessctl" | "sysfs" | "xrandr"
+	Label string // human label, e.g. "Backlight (brightnessctl)"
+	Kind  string // "hardware" (real backlight) | "software" (gamma) — the phone warns on software
+}
+
 // Brightness floor: 0 turns some backlights/gamma fully black, which would
 // leave the user unable to see the screen to recover. Never go below this.
 const brightMin = 5
@@ -90,6 +115,7 @@ type cmd struct {
 	D      int      `json:"d"`     // view: display index (multi-monitor)
 	V      int      `json:"v"`     // bright: target brightness percent
 	BD     *int     `json:"bd"`    // bright: target display index; nil/-1 = all screens
+	BE     string   `json:"be"`    // brightend: brightness backend id to switch to
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -164,17 +190,20 @@ func (se *Session) Handle(frame string) {
 				"bright": se.br.Available(),
 			},
 		}
-		if bs := se.br.Screens(); len(bs) > 0 {
-			if bs[0].Pct >= 0 {
-				welcome["bright"] = bs[0].Pct
-			}
-			// per-screen list only when there is a choice to make
-			if len(bs) > 1 {
-				list := make([]map[string]any, 0, len(bs))
-				for _, s := range bs {
-					list = append(list, map[string]any{"name": s.Name, "v": s.Pct})
+		for k, v := range se.brightSnapshot() {
+			welcome[k] = v
+		}
+		// list the alternative brightness backends only when there's a real
+		// choice (>1), so the phone can offer "dim via X or Y" (hardware
+		// backlight vs software gamma, external-monitor support, …)
+		if bc, ok := se.br.(BackendChooser); ok {
+			if bl := bc.Backends(); len(bl) > 1 {
+				list := make([]map[string]any, 0, len(bl))
+				for _, be := range bl {
+					list = append(list, map[string]any{"id": be.ID, "label": be.Label, "kind": be.Kind})
 				}
-				welcome["brights"] = list
+				welcome["backends"] = list
+				welcome["backend"] = bc.Active()
 			}
 		}
 		se.sealSend(welcome)
@@ -203,6 +232,8 @@ func (se *Session) Handle(frame string) {
 		se.inj.Media(c.K)
 	case "bright":
 		se.setBrightness(c.V, c.BD)
+	case "brightend":
+		se.selectBackend(c.BE)
 	case "view":
 		if c.On {
 			se.startStream(c.FPS, c.Q, c.Scale, c.D)
@@ -245,6 +276,48 @@ func (se *Session) moveAbs(nx, ny float64) {
 		y = 0
 	}
 	se.inj.MoveAbs(ox+x, oy+y)
+}
+
+// brightSnapshot is the phone-facing brightness state of the active backend:
+// the primary level ("bright", omitted when unknown) and, only when the host
+// has more than one adjustable screen, the per-screen list ("brights"). Shared
+// by the welcome handshake and the backend-switch reply (each backend can
+// enumerate a different set of screens).
+func (se *Session) brightSnapshot() map[string]any {
+	m := map[string]any{}
+	bs := se.br.Screens()
+	if len(bs) == 0 {
+		return m
+	}
+	if bs[0].Pct >= 0 {
+		m["bright"] = bs[0].Pct
+	}
+	if len(bs) > 1 {
+		list := make([]map[string]any, 0, len(bs))
+		for _, s := range bs {
+			list = append(list, map[string]any{"name": s.Name, "v": s.Pct})
+		}
+		m["brights"] = list
+	}
+	return m
+}
+
+// selectBackend switches which brightness mechanism drives the slider (when the
+// host exposes more than one) and replies with the new backend's fresh screen
+// list and levels — switching hardware↔software gamma changes both the set of
+// controllable screens and their reported levels, so the phone must re-sync.
+// Unknown ids and single-backend hosts are silently ignored.
+func (se *Session) selectBackend(id string) {
+	bc, ok := se.br.(BackendChooser)
+	if !ok || id == "" || !bc.Select(id) {
+		return
+	}
+	emit("brightness", bc.Active())
+	reply := map[string]any{"t": "brightend", "backend": bc.Active()}
+	for k, v := range se.brightSnapshot() {
+		reply[k] = v
+	}
+	se.sealSend(reply)
 }
 
 // setBrightness applies a slider value to one display (bd) or all (nil/-1).

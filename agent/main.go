@@ -64,6 +64,7 @@ func main() {
 	br := newBrightener()
 	name, goos := inj.HostInfo()
 	emit("host", name)
+	emitBrightness(br)
 	if !machineMode {
 		fmt.Printf("  host: %s (%s)\n", name, goos)
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // machineMode, when enabled with -machine, makes the agent emit a small,
@@ -23,6 +24,9 @@ import (
 //	peer=join <id> <ip>   a phone connected (ip may be empty = unknown)
 //	peer=leave <id>       a phone disconnected
 //	clients=<n>           current connected-client count (after each change)
+//	brightness=<id>       active brightness backend (brightnessctl|sysfs|xrandr)
+//	brightends=<csv>      all detected backends, best first — only when >1, so a
+//	                      front-end can offer "dim via X or Y"
 var machineMode bool
 
 // emit writes one machine line if machine mode is on. It flushes immediately
@@ -33,4 +37,22 @@ func emit(key, val string) {
 	}
 	fmt.Printf("@zr %s=%s\n", key, val)
 	os.Stdout.Sync()
+}
+
+// emitBrightness reports the detected brightness backend(s) in machine mode:
+// the active one always, and the full list when the host has more than one
+// mechanism so a front-end can offer the user a choice of which to drive.
+func emitBrightness(br Brightener) {
+	bc, ok := br.(BackendChooser)
+	if !ok {
+		return
+	}
+	emit("brightness", bc.Active())
+	if bl := bc.Backends(); len(bl) > 1 {
+		ids := make([]string, len(bl))
+		for i, be := range bl {
+			ids[i] = be.ID
+		}
+		emit("brightends", strings.Join(ids, ","))
+	}
 }
