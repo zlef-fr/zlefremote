@@ -12,29 +12,103 @@ import (
 	"time"
 )
 
-// Linux brightness backends, probed in order at startup:
-//  1. brightnessctl — laptops; handles permissions via logind, works on
-//     X11 and Wayland.
-//  2. sysfs         — direct /sys/class/backlight write (root / video group).
-//  3. xrandr        — software gamma on every connected output; the only
-//     option for desktops with external monitors (X11 only).
+// Linux brightness backends, probed in order (best rendering first):
+//  1. brightnessctl — laptops; real backlight, permissions via logind, works
+//     on X11 and Wayland.
+//  2. sysfs         — direct /sys/class/backlight write (root / video group);
+//     also a real backlight.
+//  3. xrandr        — software gamma on every connected output; washed-out
+//     dimming, but the only option that reaches external monitors (X11 only).
 //
-// Each backend is per-display: it enumerates its devices/outputs so the phone
-// can target one screen, and Set(-1, pct) fans out to all of them.
+// Unlike a laptop's single panel, a desktop often has several of these usable
+// at once (a real backlight AND xrandr), so rather than silently locking onto
+// the first hit we detect them all: newBrightener picks the best as default but
+// wraps them in a switchBright so the phone can offer "dim via X or Y". Each
+// backend is per-display — it enumerates its devices/outputs so the phone can
+// target one screen, and Set(-1, pct) fans out to all of them.
 func newBrightener() Brightener {
-	if b := probeBrightnessctl(); b != nil {
-		return b
+	// probes in priority order; each yields a live backend or nil when absent
+	probes := []struct {
+		id, label, kind string
+		probe           func() Brightener
+	}{
+		{"brightnessctl", "Backlight (brightnessctl)", "hardware", probeBrightnessctl},
+		{"sysfs", "Backlight (sysfs)", "hardware", probeSysfs},
+		{"xrandr", "Software dimming (xrandr)", "software", probeXrandr},
 	}
-	if b := probeSysfs(); b != nil {
-		return b
+	var avail []BrightBackend
+	byID := map[string]Brightener{}
+	for _, p := range probes {
+		if b := p.probe(); b != nil {
+			avail = append(avail, BrightBackend{ID: p.id, Label: p.label, Kind: p.kind})
+			byID[p.id] = b
+		}
 	}
-	if b := probeXrandr(); b != nil {
-		return b
+	if len(avail) == 0 {
+		return noBright{}
 	}
-	return noBright{}
+	// default = best-rendering available, unless the user pins one via env
+	active := pickActiveBackend(avail, os.Getenv("ZLEFREMOTE_BRIGHTNESS_BACKEND"))
+	return &switchBright{avail: avail, impl: byID, active: active}
+}
+
+// pickActiveBackend chooses the default backend index: the one whose ID matches
+// want (ZLEFREMOTE_BRIGHTNESS_BACKEND), else 0 — the highest-priority available
+// backend. An empty or unknown want falls back to the best default.
+func pickActiveBackend(avail []BrightBackend, want string) int {
+	if want != "" {
+		for i, be := range avail {
+			if be.ID == want {
+				return i
+			}
+		}
+	}
+	return 0
 }
 
 const brightTimeout = 3 * time.Second
+
+// ── switchBright: multi-backend holder ─────────────────────────────────────
+//
+// Delegates the Brightener interface to the currently-selected backend and
+// implements BackendChooser so the phone can switch at runtime. The active
+// index is guarded because Set runs on the brightness worker goroutine while
+// Select/Screens are driven from the session read loop.
+type switchBright struct {
+	mu     sync.RWMutex
+	avail  []BrightBackend       // metadata, priority order (stable, read-only)
+	impl   map[string]Brightener // id → live backend
+	active int                   // index into avail
+}
+
+func (s *switchBright) current() Brightener {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.impl[s.avail[s.active].ID]
+}
+
+func (s *switchBright) Available() bool           { return true }
+func (s *switchBright) Screens() []BrightScreen   { return s.current().Screens() }
+func (s *switchBright) Set(display, pct int)      { s.current().Set(display, pct) }
+func (s *switchBright) Backends() []BrightBackend { return s.avail }
+
+func (s *switchBright) Active() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.avail[s.active].ID
+}
+
+func (s *switchBright) Select(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, be := range s.avail {
+		if be.ID == id {
+			s.active = i
+			return true
+		}
+	}
+	return false
+}
 
 // ── brightnessctl ──────────────────────────────────────────────────────────
 

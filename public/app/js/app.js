@@ -141,6 +141,7 @@
   ZRConn.on('cmd', (c) => {
     if (c.t === 'f') { ZRScreen.onFrame(c); return; }
     if (c.t === 'viewerr') { ZRScreen.onErr(c.reason); return; }
+    if (c.t === 'brightend') { onBrightBackend(c); return; }
     if (c.t === 'welcome') {
       paired = true; ZRConn.markPaired();
       hideOverlay();
@@ -158,6 +159,9 @@
       // brightness slider — only for agents whose host exposes a backlight
       const canBright = !!(c.cap && c.cap.bright);
       $('brightWrap').hidden = !canBright;
+      // brightness "method" chooser — offered only when the host detected more
+      // than one mechanism (e.g. a real backlight AND software gamma)
+      buildBrightBackend(canBright ? c.backends : null, c.backend);
       buildBrightMon(canBright ? c.brights : null);
       if (canBright && typeof c.bright === 'number') setBrightUI(c.bright);
       // remember persistent computers so they reconnect from Home in one tap
@@ -389,6 +393,43 @@
     brightEl.value = v;
     brightVal.textContent = v + '%';
   }
+  // brightness method chooser: brBackends = welcome's backends list, brBackend =
+  // active backend id. Present only when the host has more than one mechanism
+  // (real backlight vs software gamma). Switching re-syncs via a 'brightend'
+  // reply because each backend controls a different set of screens.
+  const brightBackendEl = $('brightBackend');
+  let brBackends = null, brBackend = null;
+  function buildBrightBackend(list, active) {
+    brightBackendEl.innerHTML = '';
+    brBackends = (list && list.length > 1) ? list : null;
+    brBackend = active || null;
+    brightBackendEl.hidden = !brBackends;
+    if (!brBackends) return;
+    brightBackendEl.setAttribute('aria-label', t('bright_via'));
+    brBackends.forEach((be) => {
+      const b = document.createElement('button');
+      b.className = 'brmon' + (be.id === brBackend ? ' active' : '');
+      b.textContent = be.label || be.id;
+      b.addEventListener('click', () => {
+        if (brBackend === be.id) return;
+        send({ t: 'brightend', be: be.id });
+        vibrate(6);
+      });
+      brightBackendEl.appendChild(b);
+    });
+  }
+  // host confirms a backend switch: it carries the new backend's fresh screen
+  // list + current level, so rebuild the per-screen chips and re-snap the slider.
+  function onBrightBackend(c) {
+    brBackend = c.backend || brBackend;
+    brightBackendEl.querySelectorAll('.brmon').forEach((x, i) => {
+      x.classList.toggle('active', !!(brBackends && brBackends[i] && brBackends[i].id === brBackend));
+    });
+    buildBrightMon(c.brights || null);
+    if (typeof c.bright === 'number') setBrightUI(c.bright);
+    vibrate(8);
+  }
+
   // per-screen target: brScreens = welcome's brights list (kept current locally
   // as we send), brSel = chip selection (-1 = all screens)
   let brScreens = null, brSel = -1;
