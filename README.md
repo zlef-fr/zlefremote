@@ -94,6 +94,12 @@ The phone client at `remote.zlef.fr/r/` is an installable PWA ("Add to home
 screen"). Its home screen lists your **saved computers** — tap one to reconnect
 in a single tap, or "Add a device" to scan/paste a new pairing link.
 
+The manifest deliberately declares **no `orientation`** member: any value —
+including `"any"` — makes Chromium lock the window (`SCREEN_ORIENTATION_FULL_SENSOR`
+on Android for `"any"`), which rotates the installed app even when the phone's
+system rotation lock is ON. Omitting it leaves the lock type at `DEFAULT`, so the
+app follows the device's own orientation setting. Don't re-add it.
+
 Reconnect-in-one-tap needs a **stable address**, which is opt-in via
 `--remember`:
 
