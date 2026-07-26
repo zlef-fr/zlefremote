@@ -57,3 +57,45 @@ jobs:
         with:
           name: ${{ matrix.out }}
           path: dist/${{ matrix.out }}
+
+  # The Windows front-end: pure syscalls, so it cross-builds on Linux — and the
+  # installer needs the agent, which comes from the matrix job above.
+  tray:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Unit tests (protocol + i18n)
+        working-directory: tray
+        run: go test ./...
+
+      - name: Build tray
+        working-directory: tray
+        run: ./build.sh amd64
+
+      - name: Fetch the Windows agent from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: zlefremote-agent-windows-amd64.exe
+          path: dist
+
+      - name: Installer + portable zip
+        env:
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '1.0.0' }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y nsis zip
+          # a v-prefixed tag isn't a valid VIProductVersion
+          echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+          VERSION="${VERSION#v}" packaging/windows/build.sh amd64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zlefremote-windows
+          path: |
+            dist/zlefremote-tray-windows-amd64.exe
+            dist/zlefremote-setup-windows-amd64.exe
+            dist/zlefremote-windows-portable-amd64.zip
