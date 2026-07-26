@@ -132,7 +132,11 @@ const server = http.createServer((req, res) => {
   if (p.startsWith('/download/')) {
     const file = decodeURIComponent(p.slice('/download/'.length));
     const ok = /^zlefremote-agent-[a-z0-9.\-]+$/i.test(file)
-      || /^zlefremote-xfce-plugin(?:-[a-z0-9.\-]+)?\.tar\.gz$/i.test(file);
+      || /^zlefremote-xfce-plugin(?:-[a-z0-9.\-]+)?\.tar\.gz$/i.test(file)
+      // Windows front-end: installer, portable zip, bare tray exe
+      || /^zlefremote-setup-windows-[a-z0-9.\-]+\.exe$/i.test(file)
+      || /^zlefremote-tray-windows-[a-z0-9.\-]+\.exe$/i.test(file)
+      || /^zlefremote-windows-portable-[a-z0-9.\-]+\.zip$/i.test(file);
     if (!ok) return send(res, 400, 'bad name');
     return safeStatic(res, path.join(ROOT, 'dist'), file);
   }

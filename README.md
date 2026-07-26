@@ -158,6 +158,32 @@ Download section on <https://remote.zlef.fr>. The plugin drives the same agent
 binary in machine mode (`zlefremote-agent -machine`), so all crypto and input
 injection happen exactly as in terminal use.
 
+## Windows tray app
+
+The same idea on Windows: the app sits in the notification area, and the popup
+starts a session and shows the QR. See [`tray/`](tray/).
+
+<img src="media/zlefremote-tray-windows.png" alt="ZlefRemote tray popup on Windows" width="320">
+
+Grab the installer from the Download section on <https://remote.zlef.fr> (it
+bundles the tray app *and* the agent, installs per-user into
+`%LOCALAPPDATA%\Programs\ZlefRemote`, no UAC), or the portable `.zip` if you'd
+rather not install anything. Right-click the icon for start/stop, "copy the
+pairing link", "start with Windows" and an in-place agent update.
+
+Unlike the agent (cgo/robotgo, built natively per OS), the tray is pure Win32
+syscalls, so it cross-compiles from anywhere:
+
+```bash
+cd tray
+./build.sh                                # → ../dist/zlefremote-tray-windows-*.exe
+VERSION=1.0.0 ../packaging/windows/build.sh amd64   # installer + portable zip (needs makensis)
+```
+
+Like the panel plugin, it drives `zlefremote-agent -machine` and renders the
+`@zr` protocol — no second implementation of the transport, the crypto or the
+input injection.
+
 ## Telemetry
 
 On startup the agent sends **one** anonymous ping to `remote.zlef.fr/api/agent/ping`
