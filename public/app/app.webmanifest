@@ -7,7 +7,6 @@
   "start_url": "/r/?src=pwa",
   "display": "standalone",
   "display_override": ["standalone", "fullscreen"],
-  "orientation": "any",
   "background_color": "#06060a",
   "theme_color": "#06060a",
   "categories": ["utilities", "productivity"],
