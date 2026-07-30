@@ -81,6 +81,25 @@ func (rgInjector) KeyTap(k string, mods []string) {
 	robotgo.KeyTap(key, args...)
 }
 
+// KeyToggle holds or releases one key. The desktop client mirrors the real key
+// state of its own keyboard through this (modifiers included), so held
+// modifiers, shift-drag and auto-repeat behave like a locally attached keyboard
+// instead of the phone's tap-only model.
+func (rgInjector) KeyToggle(k string, down bool) {
+	key := k
+	if mapped, ok := keyMap[k]; ok {
+		key = mapped
+	}
+	if mapped, ok := modMap[k]; ok {
+		key = mapped
+	}
+	dir := "up"
+	if down {
+		dir = "down"
+	}
+	robotgo.KeyToggle(key, dir)
+}
+
 // TypeStr injects literal text. On Linux robotgo's X11 "type" path is not
 // layout-independent (it routes ASCII through keyCodeForChar with a US-QWERTY
 // shift heuristic, and builds Unicode keysym names with lowercase hex that

@@ -99,3 +99,49 @@ jobs:
             dist/zlefremote-tray-windows-amd64.exe
             dist/zlefremote-setup-windows-amd64.exe
             dist/zlefremote-windows-portable-amd64.zip
+
+  # Desktop client — the laptop-side counterpart of the phone app. Ebitengine
+  # needs cgo (and GL/X headers) on Linux and macOS, but not on Windows, so the
+  # Windows build is cross-compiled on the Linux runner.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            out: zlefremote-desktop-linux-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            out: zlefremote-desktop-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Linux build deps
+        if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc libc6-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+
+      - name: Unit tests (crypto vector, pairing links, frame reassembly)
+        working-directory: desktop
+        run: go test ./internal/...
+
+      - name: Build
+        working-directory: desktop
+        run: ./build.sh ${{ matrix.goos }} ${{ matrix.goarch }}
+
+      - name: Cross-build the Windows client (no cgo)
+        if: matrix.goos == 'linux'
+        working-directory: desktop
+        run: ./build.sh windows amd64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: |
+            dist/zlefremote-desktop-*

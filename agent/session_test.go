@@ -11,7 +11,8 @@ import (
 
 type fakeInjector struct {
 	mu    sync.Mutex
-	moves [][2]int // MoveAbs calls
+	moves [][2]int    // MoveAbs calls
+	keys  [][2]string // KeyToggle calls as (key, "down"|"up"), in order
 }
 
 func (f *fakeInjector) MoveRel(dx, dy int) {}
@@ -24,10 +25,24 @@ func (f *fakeInjector) Click(b string, d bool)      {}
 func (f *fakeInjector) Toggle(b string, down bool)  {}
 func (f *fakeInjector) Scroll(dx, dy int)           {}
 func (f *fakeInjector) KeyTap(k string, m []string) {}
-func (f *fakeInjector) TypeStr(s string)            {}
-func (f *fakeInjector) Media(k string)              {}
-func (f *fakeInjector) ScreenSize() (int, int)      { return 1920, 1080 }
-func (f *fakeInjector) HostInfo() (string, string)  { return "test-host", "linux" }
+func (f *fakeInjector) KeyToggle(k string, down bool) {
+	dir := "up"
+	if down {
+		dir = "down"
+	}
+	f.mu.Lock()
+	f.keys = append(f.keys, [2]string{k, dir})
+	f.mu.Unlock()
+}
+func (f *fakeInjector) keyEvents() [][2]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][2]string(nil), f.keys...)
+}
+func (f *fakeInjector) TypeStr(s string)           {}
+func (f *fakeInjector) Media(k string)             {}
+func (f *fakeInjector) ScreenSize() (int, int)     { return 1920, 1080 }
+func (f *fakeInjector) HostInfo() (string, string) { return "test-host", "linux" }
 func (f *fakeInjector) lastMove() ([2]int, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -104,6 +119,41 @@ func (f *fakeBright) setCalls() [][2]int {
 	return append([][2]int(nil), f.sets...)
 }
 
+// fakeClip is an in-memory host clipboard.
+type fakeClip struct {
+	mu     sync.Mutex
+	avail  bool
+	text   string
+	writes []string
+}
+
+func (f *fakeClip) Available() bool { return f.avail }
+func (f *fakeClip) Read() (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.text, nil
+}
+func (f *fakeClip) Write(s string) error {
+	f.mu.Lock()
+	f.text = s
+	f.writes = append(f.writes, s)
+	f.mu.Unlock()
+	return nil
+}
+
+// set simulates the host's own user copying something.
+func (f *fakeClip) set(s string) {
+	f.mu.Lock()
+	f.text = s
+	f.mu.Unlock()
+}
+
+func (f *fakeClip) written() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.writes...)
+}
+
 // harness ──────────────────────────────────────────────────────────────────────
 
 type harness struct {
@@ -112,6 +162,7 @@ type harness struct {
 	inj    *fakeInjector
 	scr    *fakeScreen
 	br     *fakeBright
+	clip   *fakeClip
 	mu     sync.Mutex
 	out    []map[string]any // decrypted frames the agent pushed to the phone
 }
@@ -123,8 +174,8 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}, br: &fakeBright{avail: true, cur: [2]int{70, 40}}}
-	h.se = NewSession(sealer, h.inj, h.scr, h.br, func(sealed string) {
+	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}, br: &fakeBright{avail: true, cur: [2]int{70, 40}}, clip: &fakeClip{avail: true}}
+	h.se = NewSession(sealer, h.inj, h.scr, h.br, h.clip, func(sealed string) {
 		pt, err := sealer.Open(sealed)
 		if err != nil {
 			t.Errorf("agent pushed an unopenable frame: %v", err)
@@ -310,8 +361,8 @@ func newHarnessBr(t *testing.T, br Brightener) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}}
-	h.se = NewSession(sealer, h.inj, h.scr, br, func(sealed string) {
+	h := &harness{sealer: sealer, inj: &fakeInjector{}, scr: &fakeScreen{}, clip: &fakeClip{avail: true}}
+	h.se = NewSession(sealer, h.inj, h.scr, br, h.clip, func(sealed string) {
 		pt, err := sealer.Open(sealed)
 		if err != nil {
 			t.Errorf("agent pushed an unopenable frame: %v", err)
@@ -459,6 +510,87 @@ func TestBrightPerScreenBurstKeepsBothTargets(t *testing.T) {
 	h.sendCmd(t, map[string]any{"t": "bright", "v": 50, "bd": -1})
 	h.sendCmd(t, map[string]any{"t": "bright", "v": 20, "bd": 0})
 	waitFor(t, func() bool { return h.br.levels() == [2]int{20, 50} })
+}
+
+// ── desktop-client protocol: key hold/release + clipboard sharing ───────────
+
+func TestKeyHoldForwardsDownAndUp(t *testing.T) {
+	h := newHarness(t)
+	h.sendCmd(t, map[string]any{"t": "kdown", "k": "shift"})
+	h.sendCmd(t, map[string]any{"t": "kdown", "k": "a"})
+	h.sendCmd(t, map[string]any{"t": "kup", "k": "a"})
+	h.sendCmd(t, map[string]any{"t": "kup", "k": "shift"})
+	got := h.inj.keyEvents()
+	want := [][2]string{{"shift", "down"}, {"a", "down"}, {"a", "up"}, {"shift", "up"}}
+	if len(got) != len(want) {
+		t.Fatalf("key events: got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("key event %d: got %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestWelcomeAdvertisesDesktopCaps(t *testing.T) {
+	h := newHarness(t)
+	h.sendCmd(t, map[string]any{"t": "hello"})
+	caps, ok := h.frames("welcome")[0]["cap"].(map[string]any)
+	if !ok {
+		t.Fatal("welcome carries no cap map")
+	}
+	if caps["keyhold"] != true {
+		t.Fatalf("cap.keyhold: got %#v, want true", caps["keyhold"])
+	}
+	if caps["clip"] != true {
+		t.Fatalf("cap.clip: got %#v, want true (fake clipboard is available)", caps["clip"])
+	}
+}
+
+func TestClipboardWriteFromClient(t *testing.T) {
+	h := newHarness(t)
+	h.sendCmd(t, map[string]any{"t": "clip", "s": "hello from the laptop"})
+	waitFor(t, func() bool { return len(h.clip.written()) == 1 })
+	if got := h.clip.written()[0]; got != "hello from the laptop" {
+		t.Fatalf("host clipboard: got %q", got)
+	}
+	// oversized pastes are refused rather than blowing the relay frame ceiling
+	h.sendCmd(t, map[string]any{"t": "clip", "s": string(make([]byte, maxClipBytes+1))})
+	if n := len(h.clip.written()); n != 1 {
+		t.Fatalf("oversized clip was written (%d writes)", n)
+	}
+}
+
+func TestClipboardWatchPushesHostChangesOnce(t *testing.T) {
+	h := newHarness(t)
+	h.clip.set("first")
+	h.sendCmd(t, map[string]any{"t": "clipwatch", "on": true})
+	waitFor(t, func() bool { return len(h.frames("clip")) == 1 })
+
+	// a host-side copy is pushed to the client…
+	h.clip.set("second")
+	waitFor(t, func() bool { return len(h.frames("clip")) == 2 })
+	if got := h.frames("clip")[1]["s"]; got != "second" {
+		t.Fatalf("pushed clip: got %#v, want \"second\"", got)
+	}
+
+	// …but unchanged clipboard content is never re-sent, and text the client
+	// itself just sent must not echo back.
+	h.sendCmd(t, map[string]any{"t": "clip", "s": "from client"})
+	time.Sleep(2 * clipPollInterval)
+	if n := len(h.frames("clip")); n != 2 {
+		t.Fatalf("clip pushes: got %d, want 2 (no duplicates, no echo)", n)
+	}
+	h.se.Close()
+}
+
+func TestPingAnswersWithPong(t *testing.T) {
+	h := newHarness(t)
+	h.sendCmd(t, map[string]any{"t": "ping", "i": 42})
+	pongs := h.frames("pong")
+	if len(pongs) != 1 || pongs[0]["i"].(float64) != 42 {
+		t.Fatalf("pong: got %#v", pongs)
+	}
 }
 
 func waitFor(t *testing.T, cond func() bool) {
