@@ -106,3 +106,7 @@ it is testable without a display; the package root is the Ebitengine app (UI,
 input pump, key map, theme, i18n).
 
 State lives in `~/.config/zlefremote/desktop.json` (0600 — it holds room keys).
+
+Note: Ebitengine opens its window from a package `init()`, so the binary needs a
+graphical session to start at all — on a headless box even `-version` aborts with
+a GLFW error. That is expected for a GUI client; the agent is the headless half.
