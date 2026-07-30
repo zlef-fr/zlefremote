@@ -773,7 +773,10 @@ func (a *App) drawWaiting(screen *ebiten.Image) {
 	a.spinner(screen, cx, cy-30, 18)
 	a.textCenter(screen, msg, a.faces.md, cx, cy+16, colTextSoft)
 	if a.statusMsg != "" {
-		a.textCenter(screen, a.statusMsg, a.faces.sm, cx, cy+44, colDanger)
+		// transport errors can be long ("failed to WebSocket dial: …") — wrap
+		// them instead of running off both edges of the window
+		w := math.Min(720, float64(a.sw)-80)
+		a.wrapTextCenter(screen, a.statusMsg, a.faces.sm, cx, cy+44, w, colDanger)
 	}
 	a.textCenter(screen, "Esc — "+a.T("help.quit"), a.faces.xs, cx, float64(a.sh)-40, colTextFain)
 }
@@ -1012,6 +1015,24 @@ func (a *App) textCenter(dst *ebiten.Image, s string, f *text.GoTextFace, cx, y 
 func (a *App) textRight(dst *ebiten.Image, s string, f *text.GoTextFace, right, y float64, col color.Color) {
 	tw, _ := text.Measure(s, f, 0)
 	a.text(dst, s, f, right-tw, y, col)
+}
+
+// wrapTextCenter is wrapText with every line centred on cx.
+func (a *App) wrapTextCenter(dst *ebiten.Image, s string, f *text.GoTextFace, cx, y, maxW float64, col color.Color) {
+	line, dy := "", 0.0
+	for _, w := range strings.Fields(s) {
+		test := strings.TrimSpace(line + " " + w)
+		if tw, _ := text.Measure(test, f, 0); tw > maxW && line != "" {
+			a.textCenter(dst, line, f, cx, y+dy, col)
+			dy += f.Size * 1.45
+			line = w
+			continue
+		}
+		line = test
+	}
+	if line != "" {
+		a.textCenter(dst, line, f, cx, y+dy, col)
+	}
 }
 
 // wrapText is a naive word wrapper — enough for the two paragraphs we show.
