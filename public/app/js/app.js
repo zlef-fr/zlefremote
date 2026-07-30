@@ -514,6 +514,32 @@
     ZRHome.init();
   }
 
-  if (ZRConn.hasTarget()) showControl();
+  // ── same link, right UI ───────────────────────────────────────────────────
+  // The agent prints ONE link. Opened on a computer it should not hand you a
+  // touch trackpad: offer the desktop remote (/d/<room>, same room and key),
+  // once — dismissing it is remembered.
+  function offerDesktopUI() {
+    const room = (location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/i) || [])[1];
+    const isDesktop = matchMedia('(pointer: fine)').matches && !navigator.maxTouchPoints && innerWidth >= 900;
+    if (!isDesktop || localStorage.getItem('zr_stay_touch') === '1') return;
+    const bar = document.createElement('div');
+    bar.className = 'ui-switch';
+    const txt = document.createElement('span');
+    txt.textContent = t('switch_desktop');
+    const go = document.createElement('button');
+    go.className = 'zl-btn zl-btn--primary zl-btn--sm';
+    go.textContent = t('switch_open');
+    go.addEventListener('click', () => {
+      location.href = (room ? '/d/' + room : '/d') + location.hash;
+    });
+    const no = document.createElement('button');
+    no.className = 'zl-btn zl-btn--ghost zl-btn--sm';
+    no.textContent = t('switch_stay');
+    no.addEventListener('click', () => { localStorage.setItem('zr_stay_touch', '1'); bar.remove(); });
+    bar.append(txt, go, no);
+    document.body.appendChild(bar);
+  }
+
+  if (ZRConn.hasTarget()) { showControl(); offerDesktopUI(); }
   else showHomeScreen();
 })();

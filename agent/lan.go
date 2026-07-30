@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -50,6 +52,17 @@ func peerIP(r *http.Request) string {
 	return addr
 }
 
+// serveEmbed writes one HTML file out of the agent's embedded client bundle.
+func serveEmbed(w http.ResponseWriter, sub fs.FS, name string) {
+	b, err := fs.ReadFile(sub, name)
+	if err != nil {
+		http.NotFound(w, &http.Request{})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(b)
+}
+
 func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, keyB64 string, port int) error {
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -57,6 +70,15 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clip
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/app/", http.StripPrefix("/app/", http.FileServer(http.FS(sub))))
+	// the desktop remote — same key, same socket, a UI for a mouse and a real
+	// keyboard. Its modules load from /app/js/, so both UIs share one transport.
+	// (its own assets live one level down in the embed, hence a second sub-FS)
+	deskFS, err := fs.Sub(sub, "desk")
+	if err != nil {
+		return err
+	}
+	mux.Handle("/desk/", http.StripPrefix("/desk/", http.FileServer(http.FS(deskFS))))
+	mux.HandleFunc("/d", func(w http.ResponseWriter, r *http.Request) { serveEmbed(w, sub, "desk/index.html") })
 	// PWA manifest + service worker are referenced at the origin root; serve
 	// them from the embed so the installable shell also works in LAN mode.
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
@@ -77,13 +99,14 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clip
 		}
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			b, _ := fs.ReadFile(sub, "index.html")
-			w.Write(b)
-			return
+		switch r.URL.Path {
+		case "/":
+			serveEmbed(w, sub, "index.html")
+		case "/d/":
+			serveEmbed(w, sub, "desk/index.html")
+		default:
+			http.NotFound(w, r)
 		}
-		http.NotFound(w, r)
 	})
 	roster := NewRoster()
 	var idMu sync.Mutex
@@ -129,10 +152,24 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clip
 	})
 
 	ip := lanIP()
-	url := fmt.Sprintf("http://%s:%d/#k=%s", ip, port, keyB64)
+	// HTTPS, not HTTP: browsers only expose crypto.subtle (the AES-256-GCM this
+	// protocol runs on) in a secure context, and a LAN IP over plain HTTP is not
+	// one. See lan_tls.go.
+	cert, certErr := lanCertificate(ip)
+	scheme := "https"
+	if certErr != nil {
+		// no certificate = no WebCrypto in the browser; say so instead of
+		// serving a page that would fail with an unexplained "missing key".
+		fmt.Fprintln(os.Stderr, "could not create the local certificate:", certErr)
+		fmt.Fprintln(os.Stderr, "LAN mode needs HTTPS for the browser's crypto — use remote mode instead.")
+		return certErr
+	}
+	url := fmt.Sprintf("%s://%s:%d/#k=%s", scheme, ip, port, keyB64)
 	emit("mode", "lan")
 	if !machineMode {
-		fmt.Printf("\n  \033[1mLAN mode\033[0m — make sure your phone is on the same Wi-Fi.\n\n")
+		fmt.Printf("\n  \033[1mLAN mode\033[0m — make sure your phone is on the same Wi-Fi.\n")
+		fmt.Printf("  This computer serves its own certificate, so the browser warns once:\n")
+		fmt.Printf("  tap \033[1mAdvanced → Proceed\033[0m. Your input stays end-to-end encrypted either way.\n\n")
 	}
 	qrPath := printQR(url)
 	emit("url", url)
@@ -145,7 +182,13 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clip
 		fmt.Printf("  Listening on %s:%d  ·  press Ctrl-C to stop\n\n", ip, port)
 	}
 
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+	}
 	log.SetFlags(log.Ltime)
-	return srv.ListenAndServe()
+	// certs come from TLSConfig, hence the empty file arguments
+	return srv.ListenAndServeTLS("", "")
 }

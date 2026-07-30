@@ -17,14 +17,15 @@ Three pieces:
   control (Linux / Windows / macOS). It injects mouse & keyboard events.
 - **The remote** — a web page that runs in any phone browser. Nothing to install
   on the phone; you open it by scanning the agent's QR code.
-- **The desktop client** — for driving one computer from another: the remote
-  screen in a window, with your own mouse, keyboard and clipboard. See
-  [`desktop/`](desktop/).
+- **The desktop remote** — for driving one computer from another. Open the SAME
+  link on a computer and it runs **in the browser** (nothing to install); a
+  [native app](desktop/) exists too, for full keyboard capture.
 
 ## How it works
 
 1. Run the agent. Pick **Local network** or **Remote**.
-2. It prints a QR code (and a URL). Scan it with your phone.
+2. It prints a QR code (and a URL). Scan it with your phone — or open the same
+   link on a computer for the [browser desktop remote](#desktop-remote--in-the-browser).
 3. The phone becomes a trackpad + keyboard + media remote — and a **live screen**.
 
 ### Display brightness
@@ -61,6 +62,18 @@ and drive it like a touchscreen:
 - Screen capture needs the real input backend (built with `-tags robotgo`, which
   already needs a display). The Screen tab only appears when the connected agent
   reports it can capture (`cap.screen` in the pairing handshake).
+
+### Why LAN mode is HTTPS
+
+Browsers only expose `crypto.subtle` — the AES-256-GCM this protocol is built on
+— in a **secure context**, and `http://192.168.x.y` is not one. So in LAN mode
+the agent serves TLS with a certificate it mints for itself (cached in
+`~/.config/zlefremote/lan-cert.pem`, covering this machine's addresses). Your
+browser warns once; tap *Advanced → Proceed* and the origin becomes secure.
+
+The certificate is not what protects the session — every frame is sealed with
+the key from the link, which never leaves the two devices. TLS only buys the
+secure context.
 
 ## Security model
 
@@ -193,22 +206,27 @@ Like the panel plugin, it drives `zlefremote-agent -machine` and renders the
 `@zr` protocol — no second implementation of the transport, the crypto or the
 input injection.
 
-## Desktop client
+## Desktop remote — in the browser
 
-Controlling a computer from another computer, rather than from a phone:
-[`desktop/`](desktop/) is a native app (Ebitengine) that joins the very same
-room, shows the host's screen and forwards your mouse, keyboard and clipboard.
+Controlling a computer *from* a computer needs no install: open the same pairing
+link there and the browser gets a desktop-shaped remote at **`/d/<room>`** (the
+phone UI lives at `/r/<room>`; opening `/r/` on a desktop offers to switch).
 
-```bash
-zlefremote-desktop 'https://remote.zlef.fr/r/AB12CD#k=…'
-```
+- the host's screen fills the window, and **clicking it takes control** —
+  the pointer is locked, so it can't wander off mid-drag;
+- **typing is layout-safe**: the browser hands us the character your keyboard
+  composed (AltGr, dead keys, accents), and the agent injects it in *its* layout;
+- **Right Ctrl is the local menu key**: tap = take / give back control,
+  `+F` fullscreen, `+P` quality, `+M` next screen, `+K` raw keys, `+C` push
+  clipboard, `+Del` Ctrl+Alt+Del, `+Tab` Alt+Tab, `+S` Super, `+Q` disconnect,
+  `+/` the list;
+- clipboard sharing, key hold/release and the latency readout need agent ≥ 1.7.0.
 
-**Right Ctrl** is its local menu key (tap = take/release control, `+F`
-fullscreen, `+P` quality, `+M` monitor, `+Del` Ctrl+Alt+Del, `+/` the full
-list). Typing is layout-safe by default — characters are composed by your own
-keyboard and injected as text on the host — with a raw-key mode for games.
-Clipboard sharing and true key hold/release need agent ≥ 1.7.0; against an older
-agent the client degrades to key taps and hides those features.
+Browsers reserve a few shortcuts for themselves (Ctrl+W, Ctrl+T, Alt+Tab,
+Escape). In Chrome/Edge, going fullscreen turns on the Keyboard Lock API and
+even those reach the remote machine; elsewhere the chords above send them
+explicitly. The [native client](desktop/) captures everything without that
+caveat — same protocol, same rooms.
 
 ## Telemetry
 

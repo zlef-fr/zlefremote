@@ -1,0 +1,137 @@
+/* ZlefRemote — desktop remote (browser). zlef DA: near-black surfaces, olive
+   accent, grape secondary. The picture is the interface; every chrome element
+   gets out of the way the moment you take control. */
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: var(--zl-bg, #06060a);
+  color: var(--zl-text, #e9eae2);
+  font-family: var(--zl-font, system-ui, sans-serif);
+  overflow: hidden;
+}
+.mono { font-family: var(--zl-font-mono, ui-monospace, monospace); }
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+.bar {
+  position: fixed; inset: 0 0 auto 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(6,6,10,.94), rgba(6,6,10,.72) 70%, transparent);
+  transition: opacity .35s ease, transform .35s ease;
+}
+/* driving: the bar lifts away, and comes back on mouse-to-the-top or Esc */
+body.driving .bar { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+body.driving.peek .bar { opacity: 1; transform: none; pointer-events: auto; }
+
+.bar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--zl-text-faint, #54554f);
+  box-shadow: 0 0 0 0 rgba(157,174,80,.5);
+  transition: background .3s ease;
+}
+.dot.live { background: var(--zl-success, #6f9a3a); animation: pulse 2.4s ease-out infinite; }
+.dot.warn { background: var(--zl-warning, #c79a3e); }
+.dot.bad  { background: var(--zl-danger, #c2566a); }
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(111,154,58,.45); }
+  70%  { box-shadow: 0 0 0 9px rgba(111,154,58,0); }
+  100% { box-shadow: 0 0 0 0 rgba(111,154,58,0); }
+}
+
+.host { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats { font-size: 12.5px; color: var(--zl-text-muted, #7d7e76); white-space: nowrap; }
+
+.tbtn {
+  appearance: none; cursor: pointer;
+  border: 1px solid var(--zl-line, rgba(255,255,255,.07));
+  background: var(--zl-surface-2, #15151c);
+  color: var(--zl-text-soft, #b6b7ad);
+  font: inherit; font-size: 13px;
+  padding: 7px 12px; border-radius: 9px;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease;
+}
+.tbtn:hover { background: var(--zl-surface-3, #1d1d25); color: var(--zl-text, #e9eae2); border-color: rgba(157,174,80,.45); }
+.tbtn:active { transform: translateY(1px); }
+.tbtn.danger:hover { border-color: rgba(194,86,106,.55); color: var(--zl-danger, #c2566a); }
+.tbtn[hidden] { display: none; }
+
+/* ── stage ───────────────────────────────────────────────────────────────── */
+.stage { position: fixed; inset: 0; display: grid; place-items: center; }
+#screen { width: 100%; height: 100%; display: block; image-rendering: auto; }
+body.driving #screen { cursor: none; }
+
+.idle { position: absolute; inset: 0; display: grid; place-items: center; background: var(--zl-bg, #06060a); }
+.idle[hidden] { display: none; }
+.idle-card { text-align: center; max-width: 620px; padding: 24px; }
+.idle-card h2 { font-size: 20px; font-weight: 600; margin: 18px 0 8px; }
+.idle-card p { margin: 0; color: var(--zl-text-muted, #7d7e76); font-size: 14.5px; line-height: 1.5; }
+.idle-card p.bad { color: var(--zl-danger, #c2566a); }
+
+.spinner {
+  width: 34px; height: 34px; margin: 0 auto; border-radius: 50%;
+  border: 2px solid rgba(157,174,80,.18);
+  border-top-color: var(--zl-olive-soft, #9dae50);
+  border-right-color: var(--zl-grape-soft, #b095b3);
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+  .dot.live { animation: none; }
+}
+
+/* not driving: dim the picture and invite the click that takes control */
+.takeover {
+  position: absolute; inset: 0; z-index: 10;
+  display: grid; place-items: center; align-content: center; gap: 14px;
+  background: rgba(6,6,10,.42);
+  animation: fade .35s ease both;
+}
+.takeover[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.take-btn {
+  cursor: pointer; font: inherit; font-size: 15px; font-weight: 600;
+  color: var(--zl-text, #e9eae2);
+  background: var(--zl-surface-2, #15151c);
+  border: 1px solid rgba(157,174,80,.5);
+  padding: 13px 22px; border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.take-btn:hover { background: var(--zl-surface-3, #1d1d25); transform: translateY(-1px); box-shadow: 0 14px 46px rgba(0,0,0,.55); }
+.take-hint { margin: 0; font-size: 13px; color: var(--zl-text-muted, #7d7e76); }
+
+/* ── shortcut sheet ──────────────────────────────────────────────────────── */
+.modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(6,6,10,.82); animation: fade .2s ease both; }
+.modal[hidden] { display: none; }
+.modal-card {
+  width: min(560px, 92vw); max-height: 86vh; overflow: auto;
+  background: var(--zl-surface-1, #0e0e13);
+  border: 1px solid var(--zl-line, rgba(255,255,255,.07));
+  border-top: 2px solid var(--zl-olive-mid, #59642a);
+  border-radius: 14px; padding: 26px 28px;
+}
+.modal-card h2 { margin: 0 0 16px; font-size: 20px; }
+.keys { list-style: none; margin: 0 0 14px; padding: 0; }
+.keys li { display: flex; justify-content: space-between; gap: 18px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 14px; }
+.keys li span:first-child { color: var(--zl-text, #e9eae2); font-family: var(--zl-font-mono, monospace); font-size: 13px; white-space: nowrap; }
+.keys li span:last-child { color: var(--zl-text-muted, #7d7e76); text-align: right; }
+.note { font-size: 13px; color: var(--zl-text-muted, #7d7e76); line-height: 1.5; margin: 0 0 18px; }
+
+/* ── toasts ──────────────────────────────────────────────────────────────── */
+.toasts { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast {
+  background: var(--zl-surface-2, #15151c);
+  border: 1px solid var(--zl-line, rgba(255,255,255,.07));
+  border-radius: 10px; padding: 9px 16px; font-size: 13.5px;
+  animation: toastIn .22s ease both;
+}
+.toast.out { animation: toastOut .3s ease both; }
+.toast.warn { border-color: rgba(199,154,62,.45); color: var(--zl-warning, #c79a3e); }
+.toast.bad { border-color: rgba(194,86,106,.45); color: var(--zl-danger, #c2566a); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(-6px); } }

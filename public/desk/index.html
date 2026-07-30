@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--zlef-seo-->
+<meta name="description" content="ZlefRemote — control another computer from this one, in the browser.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#06060a">
+<link rel="icon" href="https://assets.zlef.fr/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/app/icons/icon-192.png">
+<!--/zlef-seo-->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ZlefRemote — desktop</title>
+<link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
+<link rel="stylesheet" href="/desk/css/desk.css?v=1">
+</head>
+<body>
+
+<!-- ░░ top bar — host, stats, controls. Fades out while you're driving ░░ -->
+<header class="bar" id="bar">
+  <div class="bar-left">
+    <span class="dot" id="dot"></span>
+    <span class="host" id="hostName">…</span>
+    <span class="stats mono" id="stats"></span>
+  </div>
+  <div class="bar-right">
+    <button class="tbtn" id="btnQuality" title=""><span id="lblQuality">balanced</span></button>
+    <button class="tbtn" id="btnMonitor" hidden></button>
+    <button class="tbtn" id="btnClip" hidden></button>
+    <button class="tbtn" id="btnCad">Ctrl+Alt+Del</button>
+    <button class="tbtn" id="btnFull"></button>
+    <button class="tbtn" id="btnHelp">?</button>
+    <button class="tbtn danger" id="btnQuit"></button>
+  </div>
+</header>
+
+<!-- ░░ the remote screen ░░ -->
+<main class="stage" id="stage">
+  <canvas id="screen"></canvas>
+  <div class="idle" id="idle">
+    <div class="idle-card">
+      <div class="spinner" id="spin"></div>
+      <h2 id="idleTitle">Connecting…</h2>
+      <p id="idleText"></p>
+    </div>
+  </div>
+  <!-- shown over the picture when you are not driving -->
+  <div class="takeover" id="takeover" hidden>
+    <button class="take-btn" id="takeBtn"></button>
+    <p class="take-hint" id="takeHint"></p>
+  </div>
+</main>
+
+<!-- ░░ shortcut sheet ░░ -->
+<div class="modal" id="help" hidden>
+  <div class="modal-card">
+    <h2 id="helpTitle">Shortcuts</h2>
+    <ul class="keys" id="helpList"></ul>
+    <p class="note" id="helpCapture"></p>
+    <button class="zl-btn zl-btn--primary" id="helpClose">OK</button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/app/js/crypto.js?v=2"></script>
+<script src="/app/js/conn.js?v=3"></script>
+<script src="/desk/js/i18n.js?v=1"></script>
+<script src="/desk/js/view.js?v=1"></script>
+<script src="/desk/js/input.js?v=1"></script>
+<script src="/desk/js/app.js?v=1"></script>
+</body>
+</html>

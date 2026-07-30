@@ -22,7 +22,7 @@ const ZRConn = (() => {
   function hasTarget() { return !!parseKey(); }
 
   function detect() {
-    const rm = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,8})/i);
+    const rm = location.pathname.match(/^\/[rd]\/([A-Za-z0-9]{4,8})/i);
     if (rm) { mode = 'relay'; room = rm[1].toUpperCase(); }
     else { mode = 'direct'; }
   }

@@ -29,7 +29,7 @@ function distHave() {
 }
 
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
-const AGENT_VERSION = '1.7.0';
+const AGENT_VERSION = '1.7.1';
 const AGENT_ASSETS = {
   'linux-amd64': 'zlefremote-agent-linux-amd64',
   'windows-amd64': 'zlefremote-agent-windows-amd64.exe',
@@ -109,6 +109,12 @@ const server = http.createServer((req, res) => {
     return safeStatic(res, path.join(ROOT, 'public', 'app'), 'index.html');
   }
 
+  // desktop remote — same rooms, same key, a UI shaped for a mouse and a real
+  // keyboard: /d/<room> (relay) or /d (LAN). Nothing to install on this side.
+  if (p === '/d' || p === '/d/' || /^\/d\/[A-Z0-9]{4,8}$/i.test(p)) {
+    return safeStatic(res, path.join(ROOT, 'public', 'desk'), 'index.html');
+  }
+
   // The apt repo is now zlef-wide at apt.zlef.fr. Permanently redirect the old
   // remote.zlef.fr/apt/* paths there so existing sources.list entries keep
   // working (apt follows redirects; the signing key is the same).
@@ -167,6 +173,7 @@ const server = http.createServer((req, res) => {
 
   // static: /app/* , /css/* , /js/*
   if (p.startsWith('/app/')) return safeStatic(res, path.join(ROOT, 'public', 'app'), p.slice('/app/'.length));
+  if (p.startsWith('/desk/')) return safeStatic(res, path.join(ROOT, 'public', 'desk'), p.slice('/desk/'.length));
   if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/i18n/'))
     return safeStatic(res, path.join(ROOT, 'public'), p.replace(/^\//, ''));
 
