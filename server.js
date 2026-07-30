@@ -29,7 +29,7 @@ function distHave() {
 }
 
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
-const AGENT_VERSION = '1.6.0';
+const AGENT_VERSION = '1.7.0';
 const AGENT_ASSETS = {
   'linux-amd64': 'zlefremote-agent-linux-amd64',
   'windows-amd64': 'zlefremote-agent-windows-amd64.exe',
@@ -136,7 +136,9 @@ const server = http.createServer((req, res) => {
       // Windows front-end: installer, portable zip, bare tray exe
       || /^zlefremote-setup-windows-[a-z0-9.\-]+\.exe$/i.test(file)
       || /^zlefremote-tray-windows-[a-z0-9.\-]+\.exe$/i.test(file)
-      || /^zlefremote-windows-portable-[a-z0-9.\-]+\.zip$/i.test(file);
+      || /^zlefremote-windows-portable-[a-z0-9.\-]+\.zip$/i.test(file)
+      // desktop client (drive another machine from a laptop)
+      || /^zlefremote-desktop-[a-z0-9.\-]+$/i.test(file);
     if (!ok) return send(res, 400, 'bad name');
     return safeStatic(res, path.join(ROOT, 'dist'), file);
   }

@@ -11,12 +11,15 @@ phone browser ──(AES-256-GCM)──▶ relay (sees only ciphertext) ──�
                        or, on LAN: phone browser ──────────────▶ agent ──▶ your OS
 ```
 
-Two pieces:
+Three pieces:
 
 - **The agent** — a single portable binary you run on the computer you want to
   control (Linux / Windows / macOS). It injects mouse & keyboard events.
 - **The remote** — a web page that runs in any phone browser. Nothing to install
   on the phone; you open it by scanning the agent's QR code.
+- **The desktop client** — for driving one computer from another: the remote
+  screen in a window, with your own mouse, keyboard and clipboard. See
+  [`desktop/`](desktop/).
 
 ## How it works
 
@@ -190,6 +193,23 @@ Like the panel plugin, it drives `zlefremote-agent -machine` and renders the
 `@zr` protocol — no second implementation of the transport, the crypto or the
 input injection.
 
+## Desktop client
+
+Controlling a computer from another computer, rather than from a phone:
+[`desktop/`](desktop/) is a native app (Ebitengine) that joins the very same
+room, shows the host's screen and forwards your mouse, keyboard and clipboard.
+
+```bash
+zlefremote-desktop 'https://remote.zlef.fr/r/AB12CD#k=…'
+```
+
+**Right Ctrl** is its local menu key (tap = take/release control, `+F`
+fullscreen, `+P` quality, `+M` monitor, `+Del` Ctrl+Alt+Del, `+/` the full
+list). Typing is layout-safe by default — characters are composed by your own
+keyboard and injected as text on the host — with a raw-key mode for games.
+Clipboard sharing and true key hold/release need agent ≥ 1.7.0; against an older
+agent the client degrades to key taps and hides those features.
+
 ## Telemetry
 
 On startup the agent sends **one** anonymous ping to `remote.zlef.fr/api/agent/ping`
@@ -232,8 +252,17 @@ cd agent
 ./build.sh stub     # portable, CGO-free stub (logs input; for testing transport)
 ```
 
-Prebuilt binaries for all three platforms are produced by GitHub Actions
-(`.github/workflows/build.yml`).
+The desktop client is a separate module and builds the same way (Ebitengine
+needs cgo + GL/X headers on Linux and macOS, none on Windows):
+
+```bash
+cd desktop
+./build.sh                 # current OS/arch → ../dist/
+./build.sh windows amd64   # cross-build from Linux
+```
+
+Prebuilt binaries for all three platforms — agent, Windows front-end and
+desktop client — are produced by GitHub Actions (`.github/workflows/build.yml`).
 
 ## The relay (this repo's web service)
 

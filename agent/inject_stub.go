@@ -24,9 +24,12 @@ func (stubInjector) Click(b string, dbl bool)       { log.Printf("[stub] click %
 func (stubInjector) Toggle(b string, down bool)     { log.Printf("[stub] toggle %s down=%v", b, down) }
 func (stubInjector) Scroll(dx, dy int)              { log.Printf("[stub] scroll %+d,%+d", dx, dy) }
 func (stubInjector) KeyTap(k string, mods []string) { log.Printf("[stub] key %q mods=%v", k, mods) }
-func (stubInjector) TypeStr(s string)               { log.Printf("[stub] type %q", s) }
-func (stubInjector) Media(k string)                 { log.Printf("[stub] media %s", k) }
-func (stubInjector) ScreenSize() (int, int)         { return 1920, 1080 }
+func (stubInjector) KeyToggle(k string, down bool) {
+	log.Printf("[stub] keytoggle %q down=%v", k, down)
+}
+func (stubInjector) TypeStr(s string)       { log.Printf("[stub] type %q", s) }
+func (stubInjector) Media(k string)         { log.Printf("[stub] media %s", k) }
+func (stubInjector) ScreenSize() (int, int) { return 1920, 1080 }
 func (stubInjector) HostInfo() (string, string) {
 	h, _ := os.Hostname()
 	return h, runtime.GOOS

@@ -19,6 +19,10 @@ type Injector interface {
 	Toggle(button string, down bool)
 	Scroll(dx, dy int)
 	KeyTap(key string, mods []string)
+	// KeyToggle holds or releases a single key (including modifiers). The phone
+	// only ever taps, but the desktop client mirrors real key state so held
+	// modifiers, shift-drag and key repeat behave like a local keyboard.
+	KeyToggle(key string, down bool)
 	TypeStr(s string)
 	Media(k string)
 	ScreenSize() (int, int)
@@ -116,6 +120,7 @@ type cmd struct {
 	V      int      `json:"v"`     // bright: target brightness percent
 	BD     *int     `json:"bd"`    // bright: target display index; nil/-1 = all screens
 	BE     string   `json:"be"`    // brightend: brightness backend id to switch to
+	I      int      `json:"i"`     // ping: echoed back in the pong (round-trip timing)
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -131,6 +136,7 @@ type Session struct {
 	inj    Injector
 	scr    Screener
 	br     Brightener
+	clip   Clipper
 	send   func(sealed string) // push a sealed frame to this one client
 	paired bool
 
@@ -142,10 +148,15 @@ type Session struct {
 	frameID             uint32
 	brightWant          map[int]int // display (-1 = all) → latest requested brightness
 	brightBusy          bool        // a worker goroutine is applying brightness
+	clipStop            chan struct{}
+	clipLast            string // last clipboard text seen or written (echo guard)
 }
 
-func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, send func(string)) *Session {
-	return &Session{sealer: s, inj: inj, scr: scr, br: br, send: send}
+func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, send func(string)) *Session {
+	if clip == nil {
+		clip = noClipper{}
+	}
+	return &Session{sealer: s, inj: inj, scr: scr, br: br, clip: clip, send: send}
 }
 
 // sealSend marshals v to JSON, seals it, and pushes it to this phone.
@@ -188,6 +199,10 @@ func (se *Session) Handle(frame string) {
 			"cap": map[string]bool{
 				"screen": se.scr.Available(),
 				"bright": se.br.Available(),
+				// desktop-client capabilities: real key hold/release and
+				// clipboard sharing. Older clients ignore them.
+				"keyhold": true,
+				"clip":    se.clip.Available(),
 			},
 		}
 		for k, v := range se.brightSnapshot() {
@@ -226,8 +241,25 @@ func (se *Session) Handle(frame string) {
 		se.inj.Scroll(c.DX, c.DY)
 	case "key":
 		se.inj.KeyTap(c.K, c.Mods)
+	case "kdown":
+		se.inj.KeyToggle(c.K, true)
+	case "kup":
+		se.inj.KeyToggle(c.K, false)
 	case "text":
 		se.inj.TypeStr(c.S)
+	case "clip":
+		se.setClip(c.S)
+	case "clipget":
+		se.pushClip(true)
+	case "clipwatch":
+		if c.On {
+			se.startClipWatch()
+		} else {
+			se.stopClipWatch()
+		}
+	case "ping":
+		// round-trip probe for the client's latency HUD; echo the id back.
+		se.sealSend(map[string]any{"t": "pong", "i": c.I})
 	case "media":
 		se.inj.Media(c.K)
 	case "bright":
@@ -415,8 +447,87 @@ func (se *Session) stopStream() {
 	se.mu.Unlock()
 }
 
-// Close stops any live stream when the phone disconnects.
-func (se *Session) Close() { se.stopStream() }
+// Close stops any live stream and clipboard watcher when the client disconnects.
+func (se *Session) Close() {
+	se.stopStream()
+	se.stopClipWatch()
+}
+
+// ── clipboard sharing ───────────────────────────────────────────────────────
+// The desktop client keeps both clipboards in sync: it pushes its own copies
+// here with {t:'clip',s} and asks us to watch ours with {t:'clipwatch',on:true},
+// after which every host-side copy is pushed back as {t:'clip',s}. clipLast is
+// the echo guard — text that just crossed the wire is never sent back.
+
+// setClip writes text copied on the client into the host clipboard.
+func (se *Session) setClip(s string) {
+	if !se.clip.Available() || len(s) > maxClipBytes {
+		return
+	}
+	se.mu.Lock()
+	se.clipLast = s
+	se.mu.Unlock()
+	if err := se.clip.Write(s); err != nil {
+		log.Printf("clipboard write failed: %v", err)
+	}
+}
+
+// pushClip sends the host clipboard to the client. force ignores the echo guard
+// (an explicit {t:'clipget'} always answers); the watcher passes false so only
+// real changes travel.
+func (se *Session) pushClip(force bool) {
+	if !se.clip.Available() {
+		return
+	}
+	s, err := se.clip.Read()
+	if err != nil || s == "" || len(s) > maxClipBytes {
+		return
+	}
+	se.mu.Lock()
+	same := s == se.clipLast
+	se.clipLast = s
+	se.mu.Unlock()
+	if same && !force {
+		return
+	}
+	se.sealSend(map[string]any{"t": "clip", "s": s})
+}
+
+// startClipWatch polls the host clipboard for this client. Idempotent: a second
+// request while watching is a no-op.
+func (se *Session) startClipWatch() {
+	if !se.clip.Available() {
+		return
+	}
+	se.mu.Lock()
+	if se.clipStop != nil {
+		se.mu.Unlock()
+		return
+	}
+	se.clipStop = make(chan struct{})
+	stop := se.clipStop
+	se.mu.Unlock()
+	// seed the guard with what is already on the host clipboard, then send it
+	// once so the client starts in sync.
+	se.pushClip(true)
+	go func() {
+		for {
+			if sleepStop(stop, clipPollInterval) {
+				return
+			}
+			se.pushClip(false)
+		}
+	}()
+}
+
+func (se *Session) stopClipWatch() {
+	se.mu.Lock()
+	if se.clipStop != nil {
+		close(se.clipStop)
+		se.clipStop = nil
+	}
+	se.mu.Unlock()
+}
 
 func (se *Session) streamLoop(stop chan struct{}) {
 	emit("event", "view-start")

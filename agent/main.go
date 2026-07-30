@@ -12,7 +12,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const version = "1.6.0"
+const version = "1.7.0"
 
 const banner = `
   ┌──────────────────────────────────────────┐
@@ -62,6 +62,7 @@ func main() {
 	inj := newInjector()
 	scr := newScreener()
 	br := newBrightener()
+	clip := newClipper()
 	name, goos := inj.HostInfo()
 	emit("host", name)
 	emitBrightness(br)
@@ -103,13 +104,13 @@ func main() {
 	switch m {
 	case "lan", "l", "1":
 		pingUsage("lan", *noTelemetry)
-		if err := runLAN(sealer, inj, scr, br, keyB64, *port); err != nil {
+		if err := runLAN(sealer, inj, scr, br, clip, keyB64, *port); err != nil {
 			fmt.Fprintln(os.Stderr, "lan mode error:", err)
 			os.Exit(1)
 		}
 	case "remote", "r", "2":
 		pingUsage("remote", *noTelemetry)
-		if err := runRelay(sealer, inj, scr, br, key, keyB64, *relay, persistent); err != nil {
+		if err := runRelay(sealer, inj, scr, br, clip, key, keyB64, *relay, persistent); err != nil {
 			fmt.Fprintln(os.Stderr, "remote mode error:", err)
 			os.Exit(1)
 		}
