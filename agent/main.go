@@ -12,7 +12,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const version = "1.7.0"
+const version = "1.7.1"
 
 const banner = `
   ┌──────────────────────────────────────────┐

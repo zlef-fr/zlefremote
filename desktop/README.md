@@ -4,6 +4,12 @@ Drive another computer from a laptop or desktop: its screen in a window, your
 own mouse, keyboard and clipboard. The phone client turns a phone into a
 trackpad; this is the other half — the machine-to-machine one.
 
+**You may not need it.** The same thing runs in the browser at
+`https://remote.zlef.fr/d/<room>#k=…` — nothing to install (see the root README).
+This native app exists for the last mile the web cannot reach: browsers reserve
+Ctrl+W, Ctrl+T, Alt+Tab and Escape for themselves (Chrome/Edge fullscreen aside),
+while this one receives every key.
+
 It speaks exactly the same protocol as the phone client (same rooms, same
 AES-256-GCM envelope, same relay), so **any agent works with it** and nothing
 new is exposed on the network.
