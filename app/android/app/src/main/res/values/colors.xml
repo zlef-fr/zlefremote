@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- zlef.fr ground: near-black, never pure #000 -->
+    <color name="zl_bg">#FF06060A</color>
+    <color name="zl_olive_bright">#FFBDCE74</color>
+</resources>

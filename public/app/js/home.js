@@ -207,22 +207,17 @@ const ZRHome = (() => {
     return upsert({ name: info.name || t('new_device'), os: info.os || '', key: info.key, room: info.room, persistent: true });
   }
 
-  // ── install affordance (InstallKit) ───────────────────────────────────────
-  // InstallKit runs in manual mode (no FAB). We surface a single "Install app"
-  // pill in the home header, only when the app is installable and not already
-  // installed — and let InstallKit render the exact per-device steps on tap.
-  function setupInstall() {
-    const b = $('installBtn');
+  // ── native app affordance ─────────────────────────────────────────────────
+  // This client is no longer an installable PWA: the phone app is a real
+  // Android app now. On Android we point at the APK; everywhere else the web
+  // client IS the product, so we say nothing rather than advertise a download
+  // that phone can't use.
+  function setupGetApp() {
+    const b = $('getAppBtn');
     if (!b) return;
-    const standalone = (matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
-    if (standalone) return; // already installed → no prompt
-    b.textContent = t('install_app');
-    b.onclick = () => { try { window.InstallKit && window.InstallKit.open(); } catch {} };
-    const reveal = () => { try { if (window.InstallKit && window.InstallKit.canInstall()) b.hidden = false; } catch {} };
-    reveal();
-    setTimeout(reveal, 900); // InstallKit boots async (deferred script)
-    try { window.InstallKit && window.InstallKit.on && window.InstallKit.on('available', reveal); } catch {}
-    window.addEventListener('appinstalled', () => { b.hidden = true; });
+    if (!/Android/i.test(navigator.userAgent)) return;
+    b.textContent = t('get_app');
+    b.hidden = false;
   }
 
   // ── lock-screen controls promo card ───────────────────────────────────────
@@ -252,7 +247,7 @@ const ZRHome = (() => {
   function init() {
     wireAdd();
     render();
-    setupInstall();
+    setupGetApp();
     setupLockCard();
     // PWA shortcut / deep link: /r/?add=1 opens the add sheet straight away
     if (/[?&]add=1\b/.test(location.search)) openAdd();

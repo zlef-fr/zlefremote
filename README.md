@@ -4,19 +4,27 @@
 
 **Your phone is the trackpad.** Control your computer's mouse and keyboard from
 any phone — over your local Wi-Fi, or end-to-end encrypted from anywhere through
-[remote.zlef.fr](https://remote.zlef.fr). No app store, no account.
+[remote.zlef.fr](https://remote.zlef.fr). No account.
 
 ```
-phone browser ──(AES-256-GCM)──▶ relay (sees only ciphertext) ──▶ agent ──▶ your OS
-                       or, on LAN: phone browser ──────────────▶ agent ──▶ your OS
+phone app ──(AES-256-GCM)──▶ relay (sees only ciphertext) ──▶ agent ──▶ your OS
+                or, on LAN: phone app ──────────────────────▶ agent ──▶ your OS
 ```
 
-Three pieces:
+Four pieces:
 
 - **The agent** — a single portable binary you run on the computer you want to
   control (Linux / Windows / macOS). It injects mouse & keyboard events.
-- **The remote** — a web page that runs in any phone browser. Nothing to install
-  on the phone; you open it by scanning the agent's QR code.
+- **The Android app** — `app/`, bundle `fr.zlef.remote`, downloaded from
+  [remote.zlef.fr](https://remote.zlef.fr/app/zlefremote.apk). Scan the agent's
+  QR and the phone is a trackpad, keyboard, media remote and touchscreen. See
+  [`app/README.md`](app/README.md). **There is no iOS build** — compiling and
+  signing one needs macOS and a paid Apple developer account, and this project
+  has neither; iPhones use the web remote below.
+- **The web remote** — the same UI as a web page, for phones without the app
+  (and what the agent embeds for LAN mode). It used to be an installable PWA;
+  it is a plain web client now, and `/sw.js` is a tombstone that retires the
+  workers already installed on people's phones.
 - **The desktop remote** — for driving one computer from another. Open the SAME
   link on a computer and it runs **in the browser** (nothing to install); a
   [native app](desktop/) exists too, for full keyboard capture.
@@ -104,17 +112,11 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent -update -force  # reinstall even if already current
 ```
 
-### Saved devices & the installable phone app (PWA)
+### Saved devices
 
-The phone client at `remote.zlef.fr/r/` is an installable PWA ("Add to home
-screen"). Its home screen lists your **saved computers** — tap one to reconnect
-in a single tap, or "Add a device" to scan/paste a new pairing link.
-
-The manifest deliberately declares **no `orientation`** member: any value —
-including `"any"` — makes Chromium lock the window (`SCREEN_ORIENTATION_FULL_SENSOR`
-on Android for `"any"`), which rotates the installed app even when the phone's
-system rotation lock is ON. Omitting it leaves the lock type at `DEFAULT`, so the
-app follows the device's own orientation setting. Don't re-add it.
+Both the app and the web remote list your **saved computers** — tap one to
+reconnect, or add one by scanning/pasting a new pairing link. The app keeps the
+keys in the Android Keystore; the web client keeps them in `localStorage`.
 
 Reconnect-in-one-tap needs a **stable address**, which is opt-in via
 `--remember`:

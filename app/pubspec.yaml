@@ -1,0 +1,46 @@
+name: zlefremote
+description: "ZlefRemote — turn your phone into a trackpad, keyboard and screen for any computer."
+publish_to: 'none'
+
+# versionName+versionCode. Bump both on every release; the in-app updater
+# compares versionCode against /api/app/release.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Material/Cupertino strings for fr — without these the framework's own UI
+  # (text-selection menu, dialogs) stays English on a French phone.
+  flutter_localizations:
+    sdk: flutter
+
+  # state
+  provider: ^6.1.2
+
+  # transport + crypto (E2EE envelope shared with the agent and the web client)
+  web_socket_channel: ^3.0.1
+  cryptography: ^2.7.0
+  http: ^1.2.2
+
+  # storage: link keys are credentials → Keystore; plain settings → prefs
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+
+  # pairing
+  mobile_scanner: ^7.0.1
+  app_links: ^6.3.2
+
+  # updater (sideloaded APK channel)
+  package_info_plus: ^8.0.2
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

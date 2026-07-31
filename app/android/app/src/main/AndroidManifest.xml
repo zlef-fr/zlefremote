@@ -1,0 +1,112 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The session survives a screen-off or an app switch: a remote you have to
+         keep in the foreground is not a remote. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- sideload update channel: hand the downloaded APK to the package installer -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
+    <!-- the camera is for reading pairing QR codes and nothing else -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+    <application
+        android:label="@string/app_name"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Pairing links open the app instead of a browser tab. Verified
+                 against https://remote.zlef.fr/.well-known/assetlinks.json, so
+                 no chooser appears. Android hands us the whole URI including the
+                 fragment, which is where the encryption key lives. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="remote.zlef.fr" android:pathPrefix="/r/"/>
+                <data android:scheme="https" android:host="remote.zlef.fr" android:pathPrefix="/d/"/>
+            </intent-filter>
+
+            <!-- LAN pairing: the agent's own https://<ip>:<port>/#k=… URL is not
+                 a verifiable domain, so it arrives through our private scheme
+                 (the app also accepts it pasted). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="zlefremote"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Keeps the link alive and carries the transport controls. -->
+        <service
+            android:name=".ZrSessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <!-- Required: MediaButtonReceiver.buildMediaButtonPendingIntent()
+                 resolves the service that handles ACTION_MEDIA_BUTTON, and
+                 returns null when none is declared — which would leave the
+                 notification's buttons inert. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Maintains the end-to-end encrypted remote-control link to the user's computer while the screen is off, and exposes its media transport controls."/>
+        </service>
+
+        <!-- media buttons pressed on the notification / lock screen -->
+        <receiver
+            android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- serving the downloaded APK to the package installer -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

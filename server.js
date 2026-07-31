@@ -28,6 +28,36 @@ function distHave() {
   catch { return new Set(); }
 }
 
+// ── Android app release ─────────────────────────────────────────────────────
+// The phone client is a native Android app now (app/, bundle fr.zlef.remote),
+// built and published by scripts/release.sh into dist/app/. `dist` is bind
+// mounted read-only, so a fresh build is served the moment it lands.
+const APP_DIR = path.join(ROOT, 'dist', 'app');
+const APK_RE = /^zlefremote-\d+\.apk$/;
+
+function appManifest() {
+  try {
+    const raw = fs.readFileSync(path.join(APP_DIR, 'manifest.json'), 'utf8');
+    const parsed = JSON.parse(raw); // never serve a half-written manifest
+    return { raw, parsed };
+  } catch { return null; }
+}
+
+// Android verifies this before it lets a pairing link open the app instead of a
+// browser tab. The fingerprint is the release signing certificate's SHA-256
+// (`keytool -list -v`, printed by scripts/release.sh) — it is public by design.
+const APP_PACKAGE = 'fr.zlef.remote';
+const APP_CERT_SHA256 =
+  '51:76:75:43:EC:B1:12:27:54:BE:EF:73:DB:3F:F1:6B:EA:0C:90:63:88:49:0B:80:AA:93:75:4F:E1:64:22:43';
+const ASSETLINKS = JSON.stringify([{
+  relation: ['delegate_permission/common.handle_all_urls'],
+  target: {
+    namespace: 'android_app',
+    package_name: APP_PACKAGE,
+    sha256_cert_fingerprints: [APP_CERT_SHA256],
+  },
+}]);
+
 // ── agent release manifest (consumed by `zlefremote-agent -update`) ──────────
 const AGENT_VERSION = '1.7.1';
 const AGENT_ASSETS = {
@@ -88,7 +118,8 @@ const server = http.createServer((req, res) => {
   // landing (SSR, i18n)
   if (p === '/' || p === '/index.html') {
     const lang = pickLang(req);
-    return send(res, 200, landing(lang, distHave()), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+    return send(res, 200, landing(lang, distHave(), appManifest()?.parsed || null),
+      'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   }
 
   // /start — mobile funnel: preview the remote + send the agent to your desktop
@@ -123,6 +154,34 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
 
+  // Android App Links verification (must stay unauthenticated and uncached long)
+  if (p === '/.well-known/assetlinks.json') {
+    return send(res, 200, ASSETLINKS, 'application/json; charset=utf-8',
+      { 'Cache-Control': 'public, max-age=300' });
+  }
+
+  // Android app update manifest, read by the in-app updater
+  if (p === '/api/app/release') {
+    const m = appManifest();
+    if (!m) return send(res, 404, '{"error":"not_released"}', 'application/json; charset=utf-8');
+    return send(res, 200, m.raw, 'application/json; charset=utf-8',
+      { 'Cache-Control': 'no-cache' });
+  }
+
+  // the APK itself. Must be matched before the /app/* static handler below,
+  // which serves the web client's assets from public/app.
+  if (p === '/app/zlefremote.apk') {
+    const m = appManifest();
+    if (!m) return send(res, 404, 'not released yet');
+    res.writeHead(302, { Location: `/app/zlefremote-${m.parsed.versionCode}.apk` });
+    return res.end();
+  }
+  if (p.startsWith('/app/zlefremote-') && p.endsWith('.apk')) {
+    const file = decodeURIComponent(p.slice('/app/'.length));
+    if (!APK_RE.test(file)) return send(res, 400, 'bad name');
+    return safeStatic(res, APP_DIR, file);
+  }
+
   // agent release manifest — version + per-asset sha256 + download URLs
   if (p === '/api/agent/version') {
     const assets = {};
@@ -149,9 +208,10 @@ const server = http.createServer((req, res) => {
     return safeStatic(res, path.join(ROOT, 'dist'), file);
   }
 
-  // PWA service worker — served from root so its scope is the whole origin
-  // (it only intercepts the remote app's own routes; everything else passes
-  // through). no-cache so a new worker is picked up immediately.
+  // Service-worker tombstone — the phone client is no longer a PWA, but the
+  // workers installed on people's phones are, and they would keep serving a
+  // frozen shell. Still served from root (whole-origin scope), still no-cache,
+  // so every returning browser picks it up and unregisters itself.
   if (p === '/sw.js') {
     return fs.readFile(path.join(ROOT, 'public', 'app', 'sw.js'), (err, buf) => {
       if (err) return send(res, 404, 'not found');
@@ -160,12 +220,11 @@ const server = http.createServer((req, res) => {
     });
   }
 
-  // PWA manifest for the installable remote app
+  // The web app manifest is gone with the PWA. Answer 410 rather than 404 so a
+  // returning installed shell learns the difference between "temporarily
+  // missing" and "retired".
   if (p === '/app.webmanifest') {
-    return fs.readFile(path.join(ROOT, 'public', 'app', 'app.webmanifest'), (err, buf) => {
-      if (err) return send(res, 404, 'not found');
-      send(res, 200, buf, 'application/manifest+json; charset=utf-8', { 'Cache-Control': 'no-cache' });
-    });
+    return send(res, 410, 'the phone client is a native app now: /app/zlefremote.apk');
   }
 
   // self-hosted social card

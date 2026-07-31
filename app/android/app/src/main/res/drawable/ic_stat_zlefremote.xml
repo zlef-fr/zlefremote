@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon: the ZlefRemote mark, notched screen + pointer.
+     Monochrome by contract — Android tints status icons itself. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="32" android:viewportHeight="32">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M3,5 L22,5 L29,12 L29,23 L3,23 Z M5.4,7.4 L5.4,20.6 L26.6,20.6 L26.6,13 L21,7.4 Z"/>
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M13,10 L22,16 L17.6,17 L19.6,20.6 L17,21.8 L15.1,18.2 L12,20.6 Z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M13,26 L21,26 L21,28 L13,28 Z"/>
+</vector>

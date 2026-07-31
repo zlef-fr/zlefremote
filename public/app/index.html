@@ -14,15 +14,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ZlefRemote">
-<link rel="manifest" href="/app.webmanifest">
 <title>ZlefRemote</title>
 <link rel="stylesheet" href="https://da.zlef.fr/tokens.css">
-<link rel="stylesheet" href="/app/css/client.css?v=11">
-<!-- InstallKit: accurate per-device "install this PWA" steps. mode=manual → no
-     floating FAB; the home screen's Install button calls InstallKit.open(). -->
-<script defer src="https://installkit.zlef.fr/v1/install-kit.js"
-  data-mode="manual" data-app-name="ZlefRemote" data-site="remote.zlef.fr"
-  data-theme="dark" data-accent="#9dae50"></script>
+<link rel="stylesheet" href="/app/css/client.css?v=12">
 </head>
 <body>
 <!-- connection overlay -->
@@ -41,7 +35,7 @@
 <section class="view-home" id="viewHome" hidden>
   <header class="home-top">
     <span class="home-brand"><span class="brand-mark">◑</span><span class="brand-name">Zlef<b>Remote</b></span></span>
-    <button class="installpill" id="installBtn" hidden></button>
+    <a class="installpill" id="getAppBtn" href="/app/zlefremote.apk" hidden></a>
   </header>
   <div class="home-head">
     <h1 id="homeTitle"></h1>
@@ -192,11 +186,15 @@
 <script src="/app/js/crypto.js?v=2"></script>
 <script src="/app/js/conn.js?v=3"></script>
 <script src="/app/js/input.js?v=2"></script>
-<script src="/app/js/home.js?v=3"></script>
+<script src="/app/js/home.js?v=4"></script>
 <script src="/app/js/media-session.js?v=1"></script>
 <script src="/app/js/screen.js?v=3"></script>
-<script src="/app/js/app.js?v=11"></script>
+<script src="/app/js/app.js?v=12"></script>
 <script>
+  // This client is no longer a PWA — the phone app is native now. Register the
+  // worker one last time anyway: /sw.js is a tombstone that clears the old
+  // caches and unregisters itself, so anyone still running the installed PWA
+  // stops being served a frozen shell.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   }
