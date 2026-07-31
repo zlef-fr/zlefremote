@@ -1,6 +1,7 @@
 package fr.zlef.remote
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -110,6 +111,23 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    // MIUI (and any OEM battery manager) can background-restrict a
+                    // sideloaded app. The foreground service still runs, but its
+                    // socket is killed as soon as the screen goes off — a remote
+                    // that quietly dies in your pocket. Report it so the app can
+                    // say so instead of looking broken.
+                    "isBackgroundRestricted" -> result.success(isBackgroundRestricted())
+
+                    "openAppSettings" -> {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:$packageName"),
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                        result.success(true)
+                    }
+
                     "canInstallPackages" -> result.success(canInstallPackages())
 
                     "installApk" -> {
@@ -140,6 +158,12 @@ class MainActivity : FlutterActivity() {
             notificationResult?.success(hasNotificationPermission())
             notificationResult = null
         }
+    }
+
+    private fun isBackgroundRestricted(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.isBackgroundRestricted
     }
 
     private fun canInstallPackages(): Boolean {

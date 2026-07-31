@@ -56,6 +56,14 @@ class ZrNative {
   Future<bool> requestNotificationPermission() =>
       _call('requestNotificationPermission');
 
+  /// True when the OS has background-restricted this app. On that setting the
+  /// foreground service survives but its socket does not: the session dies
+  /// silently the moment the screen goes off.
+  Future<bool> isBackgroundRestricted() => _call('isBackgroundRestricted');
+
+  /// Opens this app's system settings page, where the restriction is lifted.
+  Future<bool> openAppSettings() => _call('openAppSettings');
+
   /// Hands an APK to the package installer (sideload update channel).
   Future<bool> installApk(String path) => _call('installApk', {'path': path});
 

@@ -41,6 +41,8 @@ class _ControlScreenState extends State<ControlScreen> {
   StreamSubscription<ZrNativeEvent>? _nativeSub;
   ZrMode _mode = ZrMode.pad;
   bool _agentBannerDismissed = false;
+  bool _backgroundBannerDismissed = false;
+  bool _backgroundRestricted = false;
 
   @override
   void initState() {
@@ -66,6 +68,11 @@ class _ControlScreenState extends State<ControlScreen> {
     await native.setKeepAwake(_settings.keepAwake);
     await native.setVolumeKeyCapture(_settings.volumeKeys);
     _nativeSub = native.events.listen(_onNativeEvent);
+    // A background-restricted app keeps its foreground service but loses its
+    // socket the moment the screen goes off. Say so up front — a session that
+    // dies in your pocket is the one failure the user can't diagnose.
+    final restricted = await native.isBackgroundRestricted();
+    if (mounted && restricted) setState(() => _backgroundRestricted = true);
   }
 
   void _onNativeEvent(ZrNativeEvent event) {
@@ -135,9 +142,16 @@ class _ControlScreenState extends State<ControlScreen> {
               Expanded(
                 child: Stack(
                   children: [
-                    _Panes(mode: _mode, bannerDismissed: _agentBannerDismissed,
-                        onDismissBanner: () =>
-                            setState(() => _agentBannerDismissed = true)),
+                    _Panes(
+                      mode: _mode,
+                      bannerDismissed: _agentBannerDismissed,
+                      onDismissBanner: () =>
+                          setState(() => _agentBannerDismissed = true),
+                      backgroundRestricted:
+                          _backgroundRestricted && !_backgroundBannerDismissed,
+                      onDismissBackground: () =>
+                          setState(() => _backgroundBannerDismissed = true),
+                    ),
                     const _ConnectionOverlay(),
                   ],
                 ),
@@ -229,11 +243,15 @@ class _Panes extends StatelessWidget {
     required this.mode,
     required this.bannerDismissed,
     required this.onDismissBanner,
+    required this.backgroundRestricted,
+    required this.onDismissBackground,
   });
 
   final ZrMode mode;
   final bool bannerDismissed;
   final VoidCallback onDismissBanner;
+  final bool backgroundRestricted;
+  final VoidCallback onDismissBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -244,6 +262,39 @@ class _Panes extends StatelessWidget {
 
     return Column(
       children: [
+        AnimatedSize(
+          duration: Z.normal,
+          curve: Z.ease,
+          child: backgroundRestricted
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(Z.s4, 0, Z.s4, Z.s2),
+                  child: ZCard(
+                    padding: const EdgeInsets.all(Z.s3),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.battery_alert_rounded,
+                            size: 18, color: Z.warning),
+                        const SizedBox(width: Z.s2),
+                        Expanded(
+                          child: Text(l.t('background_restricted_banner'),
+                              style: Z.bodySoft.copyWith(fontSize: 14.5)),
+                        ),
+                        const SizedBox(width: Z.s2),
+                        ZButton(
+                          label: l.t('open_app_settings'),
+                          kind: ZButtonKind.ghost,
+                          size: ZButtonSize.sm,
+                          onPressed: () async {
+                            await ZrNative.instance.openAppSettings();
+                            onDismissBackground();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
         AnimatedSize(
           duration: Z.normal,
           curve: Z.ease,

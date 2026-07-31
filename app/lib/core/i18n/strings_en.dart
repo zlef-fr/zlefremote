@@ -226,6 +226,13 @@ const Map<String, String> stringsEn = {
       'This Android version won’t show the media card.',
   'grant_permission': 'Allow notifications',
 
+  'cap_backgroundSession_title': 'Session with the screen off',
+  'cap_backgroundSession_needsPermission':
+      'Android is restricting this app in the background, so the connection to your computer is cut the moment the screen goes off — the session looks alive and answers nothing. Allow background activity (Settings › Battery › unrestricted) to keep it.',
+  'open_app_settings': 'Open app settings',
+  'background_restricted_banner':
+      'The screen going off will cut this session: Android has this app background-restricted.',
+
   'cap_volumeKeys_title': 'Volume rocker',
   'cap_volumeKeys_phoneLacks':
       'This phone doesn’t let the app read its volume buttons.',

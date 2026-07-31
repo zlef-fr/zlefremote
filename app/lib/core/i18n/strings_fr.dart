@@ -222,6 +222,13 @@ const Map<String, String> stringsFr = {
       'Cette version d’Android n’affichera pas la carte média.',
   'grant_permission': 'Autoriser les notifications',
 
+  'cap_backgroundSession_title': 'Session écran éteint',
+  'cap_backgroundSession_needsPermission':
+      'Android restreint cette app en arrière-plan : la connexion à votre ordinateur est coupée dès que l’écran s’éteint — la session paraît vivante et ne répond plus. Autorisez l’activité en arrière-plan (Réglages › Batterie › sans restriction) pour la conserver.',
+  'open_app_settings': 'Ouvrir les réglages de l’app',
+  'background_restricted_banner':
+      'L’extinction de l’écran coupera cette session : Android restreint cette app en arrière-plan.',
+
   'cap_volumeKeys_title': 'Boutons de volume',
   'cap_volumeKeys_phoneLacks':
       'Ce téléphone ne laisse pas l’application lire ses boutons de volume.',

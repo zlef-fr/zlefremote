@@ -23,6 +23,7 @@ class SettingsControls extends StatefulWidget {
 
 class _SettingsControlsState extends State<SettingsControls> {
   ZrCapState _notifications = ZrCapState.ready;
+  ZrCapState _background = ZrCapState.ready;
 
   @override
   void initState() {
@@ -32,9 +33,14 @@ class _SettingsControlsState extends State<SettingsControls> {
 
   Future<void> _refreshPermissions() async {
     final granted = await ZrNative.instance.hasNotificationPermission();
+    final restricted = await ZrNative.instance.isBackgroundRestricted();
     if (mounted) {
-      setState(() => _notifications =
-          granted ? ZrCapState.ready : ZrCapState.needsPermission);
+      setState(() {
+        _notifications =
+            granted ? ZrCapState.ready : ZrCapState.needsPermission;
+        _background =
+            restricted ? ZrCapState.needsPermission : ZrCapState.ready;
+      });
     }
   }
 
@@ -118,6 +124,18 @@ class _SettingsControlsState extends State<SettingsControls> {
             actionLabel: l.t('grant_permission'),
             action: () async {
               await ZrNative.instance.requestNotificationPermission();
+              await _refreshPermissions();
+            },
+          ),
+        ],
+        if (_background != ZrCapState.ready) ...[
+          const SizedBox(height: Z.s2),
+          ZCapabilityNotice(
+            cap: ZrCap.backgroundSession,
+            state: _background,
+            actionLabel: l.t('open_app_settings'),
+            action: () async {
+              await ZrNative.instance.openAppSettings();
               await _refreshPermissions();
             },
           ),

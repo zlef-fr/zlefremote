@@ -66,3 +66,45 @@ developer account; this host is Linux and the project has neither. The Dart code
 is written to stay portable (no Android-only plugin in `lib/core/`), so the day
 a Mac is available it is a build, not a rewrite. Until then the landing page says
 so plainly instead of showing a greyed-out App Store badge.
+
+## Gotcha: MIUI (and any OEM battery manager) background-restricts sideloads
+
+Verified on a Redmi Note 8 Pro, Android 10. A sideloaded app lands with
+`RUN_IN_BACKGROUND: ignore` / `RUN_ANY_IN_BACKGROUND: ignore`. The foreground
+service still runs and the notification stays on screen, but **the socket is
+killed the moment the screen goes off** — the session looks alive and answers
+nothing. Measured: the link dropped within ~a minute of screen-off; with the
+restriction lifted it held two minutes of screen-off with zero disconnects.
+
+The app tries to say so rather than die quietly: a banner on the control screen
+and a capability notice in settings, both with a button that opens the right
+settings page, gated on `ActivityManager.isBackgroundRestricted()`.
+
+**Caveat — the detection is unverified on MIUI.** With the appops forced to
+`ignore` on the Redmi, the banner did *not* appear, i.e. that API returned false
+even though the restriction was in force. `isBackgroundRestricted()` is the
+AOSP-correct signal (it maps to `OP_RUN_ANY_IN_BACKGROUND != MODE_ALLOWED`), so
+it should hold on stock Android, but MIUI appears to enforce its own background
+policy without surfacing it there. Treat the banner as best-effort until it has
+been seen firing on a real restricted device; a heartbeat-based fallback ("the
+link died while the screen was off") would catch what the API misses.
+
+Lifting the restriction by hand for a test device:
+
+    adb shell appops set fr.zlef.remote RUN_IN_BACKGROUND allow
+    adb shell appops set fr.zlef.remote RUN_ANY_IN_BACKGROUND allow
+
+## Gotcha: installing on that phone at all
+
+`adb install` fails with `INSTALL_FAILED_USER_RESTRICTED` (MIUI's "install via
+USB" wall, which wants a Mi account + SIM). The path that works is `adb push`
+to `/sdcard/Download` then tapping the file in the Downloads UI. Play Protect
+then fails its own verification with `Finsky: Could not find valid auth token`
+and reports a bare "Application non installée"; clear it for the install and
+put it back afterwards:
+
+    adb shell settings put global package_verifier_enable 0
+    adb shell settings put global package_verifier_user_consent -1
+    # … install …
+    adb shell settings put global package_verifier_enable 1
+    adb shell settings put global package_verifier_user_consent 1

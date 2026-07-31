@@ -36,6 +36,7 @@ enum ZrCap {
   multiMonitor,
   lockScreenControls,
   volumeKeys,
+  backgroundSession,
 }
 
 class ZrCapabilities {
