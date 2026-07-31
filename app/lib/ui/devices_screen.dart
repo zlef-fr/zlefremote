@@ -147,19 +147,21 @@ class _DeviceCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Row(
+                // "Dernier usage · à l'instant" plus a tag runs past a narrow
+                // card, and a truncated tag is worse than a wrapped line.
+                Wrap(
+                  spacing: Z.s2,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       '${l.t('last_used')} · ${l.relativeTime(device.lastUsed)}',
                       style: Z.mono.copyWith(color: Z.inkMuted),
                     ),
-                    if (device.isLan) ...[
-                      const SizedBox(width: Z.s2),
-                      _Tag(l.t('lan_device'), Icons.wifi_rounded),
-                    ] else if (!device.persistent) ...[
-                      const SizedBox(width: Z.s2),
+                    if (device.isLan)
+                      _Tag(l.t('lan_device'), Icons.wifi_rounded)
+                    else if (!device.persistent)
                       _Tag(l.t('one_shot_device'), Icons.timer_outlined),
-                    ],
                   ],
                 ),
               ],
@@ -319,8 +321,13 @@ class _Tag extends StatelessWidget {
           children: [
             Icon(icon, size: 12, color: Z.inkMuted),
             const SizedBox(width: 4),
-            Text(label,
-                style: Z.mono.copyWith(fontSize: 11, color: Z.inkMuted)),
+            // "Appairage unique" next to a timestamp overruns a 262pt card
+            Flexible(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Z.mono.copyWith(fontSize: 11, color: Z.inkMuted)),
+            ),
           ],
         ),
       );
@@ -333,10 +340,13 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
-    return Center(
+    // A 262pt-wide phone wraps this copy onto enough lines to outgrow a short
+    // screen; an empty state that clips its own call to action is a dead end.
+    return SingleChildScrollView(
       child: ZReveal(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Z.s5),
+          padding: const EdgeInsets.symmetric(
+              horizontal: Z.s5, vertical: Z.s5),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

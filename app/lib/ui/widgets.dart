@@ -531,19 +531,28 @@ class _ZCapabilityNoticeState extends State<ZCapabilityNotice> {
                 Expanded(
                   child: Text(
                     l.capTitle(cap),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: Z.body.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Z.surface3,
-                    borderRadius: BorderRadius.circular(Z.rSm),
-                    border: Border.all(color: Z.line),
+                // The badge has to yield too: on a 262pt phone the title, the
+                // word "Indisponible" and the chevron do not all fit at their
+                // natural widths, and a fixed badge pushes the row over.
+                Flexible(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Z.surface3,
+                      borderRadius: BorderRadius.circular(Z.rSm),
+                      border: Border.all(color: Z.line),
+                    ),
+                    child: Text(l.t('cap_unavailable'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Z.mono.copyWith(fontSize: 11.5, color: tone)),
                   ),
-                  child: Text(l.t('cap_unavailable'),
-                      style: Z.mono.copyWith(fontSize: 11.5, color: tone)),
                 ),
                 const SizedBox(width: Z.s2),
                 Icon(

@@ -166,6 +166,15 @@ const Map<String, String> stringsFr = {
   'lock_controls': 'Contrôles sur l’écran verrouillé',
   'lock_controls_note':
       'Affiche lecture et volume par-dessus l’écran verrouillé, comme une app de navigation — sans déverrouiller, et sans emprunter la carte du lecteur de musique. Le trackpad, le clavier et vos ordinateurs enregistrés restent derrière le verrou. Désactivez si vous préférez que le téléphone n’affiche rien tant qu’il est verrouillé.',
+  'lock_full': 'Contrôle complet sur l’écran verrouillé',
+  'lock_full_note':
+      'Place toute la télécommande — trackpad, clavier, écran — par-dessus l’écran verrouillé, au lieu de la seule lecture et du volume. Pratique, et à comprendre : quiconque prend ce téléphone peut alors piloter votre ordinateur sans connaître votre code.',
+  'lock_full_confirm_title': 'Autoriser le contrôle complet verrouillé ?',
+  'lock_full_confirm_body':
+      'Toute personne tenant ce téléphone pourra déplacer la souris, taper et voir l’écran de votre ordinateur sans le déverrouiller. Vos ordinateurs enregistrés et les réglages de l’app restent protégés.',
+  'lock_full_confirm_ok': 'Autoriser',
+  'lock_full_warning':
+      'Le contrôle complet est accessible sans déverrouiller ce téléphone.',
   'volume_keys': 'Le volume du téléphone pilote l’ordinateur',
   'volume_keys_note':
       'Pendant une session, les boutons de volume changent le volume de l’ordinateur au lieu de celui du téléphone.',

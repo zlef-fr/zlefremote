@@ -38,6 +38,12 @@ class ZrSettings extends ChangeNotifier {
   bool get lockScreenControls => _prefs.getBool('lock_controls') ?? true;
   set lockScreenControls(bool v) => _set('lock_controls', v);
 
+  /// Put the WHOLE remote over the lock screen — trackpad, keyboard and all —
+  /// instead of the playback-only surface. Off by default and confirmed once,
+  /// because it hands full control of the computer to anyone holding the phone.
+  bool get lockFullControl => _prefs.getBool('lock_full_control') ?? false;
+  set lockFullControl(bool v) => _set('lock_full_control', v);
+
   /// Send the phone's volume rocker to the computer while a session is open.
   bool get volumeKeys => _prefs.getBool('volume_keys') ?? false;
   set volumeKeys(bool v) => _set('volume_keys', v);

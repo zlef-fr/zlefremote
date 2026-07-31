@@ -106,6 +106,8 @@ void main() {
     'landscape': Size(2340, 1080),
     // a small phone: 360pt wide is where long French labels bite
     'narrow': Size(990, 1980),
+    // smaller still — 262pt wide, 553pt tall
+    'tiny': Size(720, 1520),
   };
 
   for (final viewport in viewports.entries) {

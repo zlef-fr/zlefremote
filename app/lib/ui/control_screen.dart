@@ -26,9 +26,14 @@ import 'widgets.dart';
 /// fills everything else — a phone remote is held one-handed, so nothing that
 /// matters lives at the top of the screen.
 class ControlScreen extends StatefulWidget {
-  const ControlScreen({super.key, required this.device});
+  const ControlScreen({super.key, required this.device, this.session});
 
   final ZrDevice device;
+
+  /// Test seam: supply a session and the screen drives that one instead of
+  /// dialling a computer. Nothing in the app passes it.
+  @visibleForTesting
+  final ZrSession? session;
 
   @override
   State<ControlScreen> createState() => _ControlScreenState();
@@ -50,12 +55,16 @@ class _ControlScreenState extends State<ControlScreen> {
   void initState() {
     super.initState();
     _settings = context.read<ZrSettings>();
-    _session = ZrSession(
-      device: widget.device,
-      onDeviceLearned: (updated) => context.read<ZrDeviceStore>().upsert(updated),
-    )..addListener(_onSessionChanged);
+    final injected = widget.session;
+    _session = injected ??
+        ZrSession(
+          device: widget.device,
+          onDeviceLearned: (updated) =>
+              context.read<ZrDeviceStore>().upsert(updated),
+        );
+    _session.addListener(_onSessionChanged);
     _session.quality = _settings.viewQuality;
-    unawaited(_session.start());
+    if (injected == null) unawaited(_session.start());
     _startNativeSurfaces();
   }
 
@@ -69,7 +78,9 @@ class _ControlScreenState extends State<ControlScreen> {
     }
     await native.setKeepAwake(_settings.keepAwake);
     await native.setVolumeKeyCapture(_settings.volumeKeys);
-    _nativeSub = native.events.listen(_onNativeEvent);
+    // the platform channel is absent under test and on a plain Flutter host;
+    // an unhandled stream error there would fail the whole screen.
+    _nativeSub = native.events.listen(_onNativeEvent, onError: (_) {});
     // A background-restricted app keeps its foreground service but loses its
     // socket the moment the screen goes off. Say so up front — a session that
     // dies in your pocket is the one failure the user can't diagnose.
@@ -115,9 +126,9 @@ class _ControlScreenState extends State<ControlScreen> {
       ..stopSession()
       ..setKeepAwake(false)
       ..setVolumeKeyCapture(false);
-    _session
-      ..removeListener(_onSessionChanged)
-      ..dispose();
+    _session.removeListener(_onSessionChanged);
+    // an injected session belongs to whoever made it
+    if (widget.session == null) _session.dispose();
     super.dispose();
   }
 
@@ -140,7 +151,12 @@ class _ControlScreenState extends State<ControlScreen> {
       child: Scaffold(
         backgroundColor: Z.bg,
         resizeToAvoidBottomInset: true,
-        body: _locked && _settings.lockScreenControls
+        // Over the keyguard the user gets what they chose: the playback-only
+        // surface by default, or the whole remote once they have enabled it and
+        // accepted what that means.
+        body: _locked &&
+                _settings.lockScreenControls &&
+                !_settings.lockFullControl
             ? const LockSurface()
             : SafeArea(
           child: Column(
@@ -419,14 +435,21 @@ class _DockButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(Z.rMd),
             border: Border.all(color: selected ? Z.oliveMid : Colors.transparent),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon,
                   size: 21, color: selected ? Z.oliveBright : Z.inkMuted),
               const SizedBox(height: 2),
+              // one line, always: a dock cell is ~88pt wide and a wrapped
+              // label pushes the icon out of a fixed-height button.
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: Z.label.copyWith(
                   fontSize: 12,
                   color: selected ? Z.oliveBright : Z.inkMuted,
@@ -473,11 +496,15 @@ class _ConnectionOverlay extends StatelessWidget {
         ),
     };
 
+    // A small phone in landscape has ~200pt of height here once the dock and
+    // top bar are taken: the copy has to be able to scroll, and the two actions
+    // have to be able to stack, or the overlay clips the way out of the error.
     return Container(
       color: Z.bg.withValues(alpha: .96),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(Z.s5),
-      child: Column(
+      child: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (working)
@@ -498,15 +525,16 @@ class _ConnectionOverlay extends StatelessWidget {
             Text(body, style: Z.bodySoft, textAlign: TextAlign.center),
           if (!working) ...[
             const SizedBox(height: Z.s5),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: Z.s3,
+              runSpacing: Z.s2,
               children: [
                 ZButton(
                   label: l.t('back_to_devices'),
                   kind: ZButtonKind.ghost,
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                const SizedBox(width: Z.s3),
                 ZButton(
                   label: l.t('try_again'),
                   icon: Icons.refresh_rounded,
@@ -516,6 +544,7 @@ class _ConnectionOverlay extends StatelessWidget {
             ),
           ],
         ],
+        ),
       ),
     );
   }

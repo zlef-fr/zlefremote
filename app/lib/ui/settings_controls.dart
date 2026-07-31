@@ -140,6 +140,45 @@ class _SettingsControlsState extends State<SettingsControls> {
             },
           ),
         ],
+        // Unrestricting the lock screen is a security decision, so it is
+        // confirmed once and then kept visible while it is on.
+        ZRow(
+          title: l.t('lock_full'),
+          note: l.t('lock_full_note'),
+          dimmed: !settings.lockScreenControls,
+          trailing: ZToggle(
+            value: settings.lockFullControl,
+            onChanged: settings.lockScreenControls
+                ? (v) async {
+                    if (!v) {
+                      settings.lockFullControl = false;
+                      return;
+                    }
+                    final ok = await _confirmFullControl(context);
+                    if (ok) settings.lockFullControl = true;
+                  }
+                : null,
+          ),
+        ),
+        if (settings.lockFullControl && settings.lockScreenControls)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Z.s2),
+            child: ZCard(
+              padding: const EdgeInsets.all(Z.s3),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_open_rounded,
+                      size: 18, color: Z.warning),
+                  const SizedBox(width: Z.s2),
+                  Expanded(
+                    child: Text(l.t('lock_full_warning'),
+                        style: Z.bodySoft
+                            .copyWith(fontSize: 14.5, color: Z.warning)),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ZRow(
           title: l.t('volume_keys'),
           note: l.t('volume_keys_note'),
@@ -154,4 +193,39 @@ class _SettingsControlsState extends State<SettingsControls> {
       ],
     );
   }
+}
+
+
+/// One explicit confirmation before the whole remote becomes reachable without
+/// a PIN. Destructive styling on purpose: this is not a preference, it is a
+/// decision about who can drive the computer.
+Future<bool> _confirmFullControl(BuildContext context) async {
+  final l = L10n.of(context);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: Z.surface1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Z.rLg),
+        side: const BorderSide(color: Z.lineStrong),
+      ),
+      title: Text(l.t('lock_full_confirm_title'), style: Z.title),
+      content: Text(l.t('lock_full_confirm_body'), style: Z.bodySoft),
+      actions: [
+        ZButton(
+          label: l.t('cancel'),
+          kind: ZButtonKind.secondary,
+          size: ZButtonSize.sm,
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        ZButton(
+          label: l.t('lock_full_confirm_ok'),
+          kind: ZButtonKind.destructive,
+          size: ZButtonSize.sm,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
 }

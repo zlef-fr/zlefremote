@@ -170,6 +170,14 @@ const Map<String, String> stringsEn = {
   'lock_controls': 'Lock-screen controls',
   'lock_controls_note':
       'Shows playback and volume over the lock screen, the way a navigation app does — no unlocking, and no borrowing the music player’s card. The trackpad, keyboard and your saved computers stay behind the lock. Turn this off if you would rather the phone show nothing until it is unlocked.',
+  'lock_full': 'Full control on the lock screen',
+  'lock_full_note':
+      'Puts the entire remote — trackpad, keyboard, screen — over the lock screen instead of just playback and volume. Convenient, and worth understanding: anyone who picks up this phone can then drive your computer without knowing your PIN.',
+  'lock_full_confirm_title': 'Allow full control while locked?',
+  'lock_full_confirm_body':
+      'Anyone holding this phone will be able to move the mouse, type and read the screen of your computer without unlocking the phone first. Your saved computers and this app’s settings stay protected.',
+  'lock_full_confirm_ok': 'Allow it',
+  'lock_full_warning': 'Full control is reachable without unlocking this phone.',
   'volume_keys': 'Volume rocker controls the computer',
   'volume_keys_note':
       'While a session is open, the phone’s volume buttons change the computer’s volume instead of its own.',
