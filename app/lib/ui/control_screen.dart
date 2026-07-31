@@ -14,6 +14,7 @@ import '../core/settings.dart';
 import 'panes/keys_pane.dart';
 import 'panes/media_pane.dart';
 import 'panes/screen_pane.dart';
+import 'lock_surface.dart';
 import 'panes/touchpad_pane.dart';
 import 'session_settings_sheet.dart';
 import 'theme.dart';
@@ -43,6 +44,7 @@ class _ControlScreenState extends State<ControlScreen> {
   bool _agentBannerDismissed = false;
   bool _backgroundBannerDismissed = false;
   bool _backgroundRestricted = false;
+  bool _locked = false;
 
   @override
   void initState() {
@@ -85,6 +87,12 @@ class _ControlScreenState extends State<ControlScreen> {
         _session.media('voldown');
       case ZrNativeEventKind.stopRequested:
         if (mounted) Navigator.of(context).maybePop();
+      case ZrNativeEventKind.keyguard:
+        // The activity shows over the keyguard, so "locked" is not "hidden" —
+        // it decides which surface is safe to put in front of whoever picked
+        // the phone up.
+        final locked = event.value == 'locked';
+        if (mounted && locked != _locked) setState(() => _locked = locked);
     }
   }
 
@@ -132,7 +140,9 @@ class _ControlScreenState extends State<ControlScreen> {
       child: Scaffold(
         backgroundColor: Z.bg,
         resizeToAvoidBottomInset: true,
-        body: SafeArea(
+        body: _locked && _settings.lockScreenControls
+            ? const LockSurface()
+            : SafeArea(
           child: Column(
             children: [
               _TopBar(
@@ -459,7 +469,7 @@ class _ConnectionOverlay extends StatelessWidget {
             ZrConnState.closed => l.t('closed_host'),
             _ => l.t('connecting'),
           },
-          working ? l.t('e2ee_long') : l.t('closed_host'),
+          working ? '' : l.t('closed_host'),
         ),
     };
 
@@ -484,7 +494,8 @@ class _ConnectionOverlay extends StatelessWidget {
           const SizedBox(height: Z.s4),
           Text(title, style: Z.title, textAlign: TextAlign.center),
           const SizedBox(height: Z.s2),
-          Text(body, style: Z.bodySoft, textAlign: TextAlign.center),
+          if (body.isNotEmpty)
+            Text(body, style: Z.bodySoft, textAlign: TextAlign.center),
           if (!working) ...[
             const SizedBox(height: Z.s5),
             Row(

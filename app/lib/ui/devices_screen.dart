@@ -340,7 +340,7 @@ class _Empty extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ZrMark(size: 72, color: Z.inkFaint, accent: Z.olive),
+              const ZrMark(size: 88, opacity: .55),
               const SizedBox(height: Z.s5),
               Text(l.t('devices_empty_title'),
                   style: Z.title, textAlign: TextAlign.center),

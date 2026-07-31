@@ -297,24 +297,6 @@ class _ScreenPaneState extends State<ScreenPane> {
                       }),
                     ),
                   ),
-                if (image != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: Z.s3, vertical: 6),
-                        color: Z.bg.withValues(alpha: .55),
-                        child: Text(
-                          l.t('screen_hint'),
-                          textAlign: TextAlign.center,
-                          style: Z.mono.copyWith(fontSize: 11, color: Z.inkMuted),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),

@@ -28,7 +28,9 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -61,31 +63,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Keeps the link alive and carries the transport controls. -->
+        <!-- Keeps the link alive. Its notification opens the remote, which is
+             showWhenLocked — so the controls are reachable from the lock screen
+             without a media session and without unlocking. -->
         <service
             android:name=".ZrSessionService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
-            <!-- Required: MediaButtonReceiver.buildMediaButtonPendingIntent()
-                 resolves the service that handles ACTION_MEDIA_BUTTON, and
-                 returns null when none is declared — which would leave the
-                 notification's buttons inert. -->
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON"/>
-            </intent-filter>
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Maintains the end-to-end encrypted remote-control link to the user's computer while the screen is off, and exposes its media transport controls."/>
         </service>
-
-        <!-- media buttons pressed on the notification / lock screen -->
-        <receiver
-            android:name="androidx.media.session.MediaButtonReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON"/>
-            </intent-filter>
-        </receiver>
 
         <!-- serving the downloaded APK to the package installer -->
         <provider

@@ -64,7 +64,4 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    // MediaSessionCompat + NotificationCompat.MediaStyle: the transport controls
-    // this app publishes to the shade and the lock screen.
-    implementation("androidx.media:media:1.7.0")
 }

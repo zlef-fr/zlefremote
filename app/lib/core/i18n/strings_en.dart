@@ -78,8 +78,7 @@ const Map<String, String> stringsEn = {
   'tab_screen': 'Screen',
   'tab_keys': 'Keyboard',
   'tab_media': 'Media',
-  'pad_hint':
-      'Drag to move · tap to click · two-finger tap right-clicks · two fingers scroll',
+  'pad_hint': 'Drag · tap · 2 fingers scroll · 3 fingers switch app',
   'btn_left': 'Left',
   'btn_right': 'Right',
   'btn_mid': 'Middle',
@@ -119,6 +118,7 @@ const Map<String, String> stringsEn = {
   'mod_shift': 'Shift',
   'mod_meta': 'Win/⌘',
   'mods_hint': 'Tap a modifier, then a key — it clears itself after one press.',
+  'fkeys': 'Function keys',
   'shortcuts': 'Shortcuts',
   'sc_copy': 'Copy',
   'sc_paste': 'Paste',
@@ -166,9 +166,10 @@ const Map<String, String> stringsEn = {
   'haptics_note': 'A short buzz on clicks and key presses.',
   'keep_awake': 'Keep the screen on',
   'keep_awake_note': 'While a computer is connected.',
+  'lock_unlock_for_more': 'Unlock the phone for the trackpad and keyboard',
   'lock_controls': 'Lock-screen controls',
   'lock_controls_note':
-      'Puts the computer’s play, skip and volume buttons in the notification shade and on the lock screen. Unlike the old web app, this takes no audio focus — music on this phone keeps playing.',
+      'Shows playback and volume over the lock screen, the way a navigation app does — no unlocking, and no borrowing the music player’s card. The trackpad, keyboard and your saved computers stay behind the lock. Turn this off if you would rather the phone show nothing until it is unlocked.',
   'volume_keys': 'Volume rocker controls the computer',
   'volume_keys_note':
       'While a session is open, the phone’s volume buttons change the computer’s volume instead of its own.',
@@ -226,6 +227,15 @@ const Map<String, String> stringsEn = {
       'This Android version won’t show the media card.',
   'grant_permission': 'Allow notifications',
 
+  'cap_agentUpdate_title': 'Update the computer’s agent',
+  'cap_agentUpdate_agentOld':
+      'This agent is too old to be updated from here. On the computer, run zlefremote-agent -update once; after that this button does it for you.',
+  'agent_update': 'Update the agent',
+  'agent_update_running': 'Updating the agent…',
+  'agent_update_done': 'Updated to {v} — restart the agent on the computer to use it.',
+  'agent_update_current': 'The agent is already up to date.',
+  'agent_update_failed': 'Update failed: {reason}',
+  'section_computer': 'This computer',
   'cap_backgroundSession_title': 'Session with the screen off',
   'cap_backgroundSession_needsPermission':
       'Android is restricting this app in the background, so the connection to your computer is cut the moment the screen goes off — the session looks alive and answers nothing. Allow background activity (Settings › Battery › unrestricted) to keep it.',

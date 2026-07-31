@@ -8,24 +8,21 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
-import androidx.media.session.MediaButtonReceiver
 
 /**
- * Keeps one remote-control session alive and puts the computer's transport
- * controls where you can reach them without unlocking: the notification shade
- * and the lock screen.
+ * Keeps one remote-control session alive and gives it a presence you can reach
+ * without unlocking: an ongoing notification, plus [MainActivity] declared
+ * `showWhenLocked`, so the remote appears over the keyguard the way a
+ * navigation app does.
  *
- * The web client had to loop a silent audio file to obtain a media card, which
- * held audio focus and paused whatever the phone itself was playing — so it
- * shipped switched off by default. A real MediaSession needs no audio at all,
- * which is why this can be on out of the box.
- *
- * Buttons do not play anything here; they send the computer's media keys, which
- * is what the user is actually asking for.
+ * Deliberately **not** a MediaSession. The web client faked one (silent looping
+ * audio) to borrow the lock-screen music card, which stole audio focus and
+ * paused whatever the phone was playing; the first native cut used a real
+ * MediaSession, which is honest but still puts the computer's controls in the
+ * *music* slot, competing with actual players and disappearing when one starts.
+ * The controls here are plain notification actions routed straight to Dart, and
+ * the lock-screen surface is our own activity.
  */
 class ZrSessionService : Service() {
 
@@ -36,8 +33,10 @@ class ZrSessionService : Service() {
         private const val ACTION_START = "fr.zlef.remote.START"
         private const val ACTION_UPDATE = "fr.zlef.remote.UPDATE"
         private const val ACTION_STOP = "fr.zlef.remote.STOP"
+        private const val ACTION_MEDIA = "fr.zlef.remote.MEDIA"
         private const val EXTRA_HOST = "host"
         private const val EXTRA_CONNECTED = "connected"
+        private const val EXTRA_MEDIA_KEY = "key"
 
         fun start(context: Context, host: String) {
             val intent = Intent(context, ZrSessionService::class.java)
@@ -66,7 +65,6 @@ class ZrSessionService : Service() {
         }
     }
 
-    private var session: MediaSessionCompat? = null
     private var host: String = ""
     private var connected: Boolean = false
     private var started = false
@@ -76,23 +74,6 @@ class ZrSessionService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        session = MediaSessionCompat(this, "ZlefRemote").apply {
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() = send("playpause")
-                override fun onPause() = send("playpause")
-                override fun onSkipToNext() = send("next")
-                override fun onSkipToPrevious() = send("prev")
-                override fun onStop() {
-                    MainActivity.emit(mapOf("type" to "stop"))
-                }
-            })
-            isActive = true
-        }
-        publishPlaybackState()
-    }
-
-    private fun send(key: String) {
-        MainActivity.emit(mapOf("type" to "media", "key" to key))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -102,12 +83,18 @@ class ZrSessionService : Service() {
                 return START_NOT_STICKY
             }
 
+            ACTION_MEDIA -> {
+                intent.getStringExtra(EXTRA_MEDIA_KEY)?.let {
+                    MainActivity.emit(mapOf("type" to "media", "key" to it))
+                }
+                return START_NOT_STICKY
+            }
+
             ACTION_START, ACTION_UPDATE -> {
                 host = intent.getStringExtra(EXTRA_HOST) ?: host
                 connected = intent.getBooleanExtra(EXTRA_CONNECTED, connected)
             }
         }
-        MediaButtonReceiver.handleIntent(session, intent)
 
         val notification = buildNotification()
         if (!started) {
@@ -135,54 +122,31 @@ class ZrSessionService : Service() {
             .createNotificationChannel(channel)
     }
 
-    /**
-     * The session is marked PLAYING so the card stays put — a paused session is
-     * collected by the system after a moment, and the whole point is that these
-     * buttons are there when you pick the phone up.
-     */
-    private fun publishPlaybackState() {
-        session?.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setActions(
-                    PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                        PlaybackStateCompat.ACTION_PLAY or
-                        PlaybackStateCompat.ACTION_PAUSE or
-                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                        PlaybackStateCompat.ACTION_STOP
-                )
-                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1f)
-                .build()
+    /** A notification action that forwards one media verb to the session. */
+    private fun mediaAction(icon: Int, title: Int, key: String): NotificationCompat.Action {
+        val intent = Intent(this, ZrSessionService::class.java)
+            .setAction(ACTION_MEDIA)
+            .putExtra(EXTRA_MEDIA_KEY, key)
+        val pending = PendingIntent.getService(
+            this,
+            key.hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session?.setMetadata(
-            MediaMetadataCompat.Builder()
-                .putString(
-                    MediaMetadataCompat.METADATA_KEY_TITLE,
-                    host.ifEmpty { getString(R.string.app_name) },
-                )
-                .putString(
-                    MediaMetadataCompat.METADATA_KEY_ARTIST,
-                    getString(R.string.session_subtitle),
-                )
-                .build()
-        )
+        return NotificationCompat.Action(icon, getString(title), pending)
     }
 
     private fun buildNotification(): android.app.Notification {
-        publishPlaybackState()
-
+        // Opening from the shade or the lock screen lands on the remote itself;
+        // MainActivity is showWhenLocked, so this works without unlocking.
         val open = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java)
+                .setAction(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
-        fun action(icon: Int, title: Int, playbackAction: Long) = NotificationCompat.Action(
-            icon,
-            getString(title),
-            MediaButtonReceiver.buildMediaButtonPendingIntent(this, playbackAction),
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -198,40 +162,28 @@ class ZrSessionService : Service() {
             .setSilent(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(
-                action(
+                mediaAction(
                     R.drawable.ic_media_previous,
                     R.string.action_previous,
-                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS,
+                    "prev",
                 )
             )
             .addAction(
-                action(
+                mediaAction(
                     R.drawable.ic_media_playpause,
                     R.string.action_play_pause,
-                    PlaybackStateCompat.ACTION_PLAY_PAUSE,
+                    "playpause",
                 )
             )
             .addAction(
-                action(
-                    R.drawable.ic_media_next,
-                    R.string.action_next,
-                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT,
-                )
-            )
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(session?.sessionToken)
-                    .setShowActionsInCompactView(0, 1, 2)
+                mediaAction(R.drawable.ic_media_next, R.string.action_next, "next")
             )
             .build()
     }
 
     override fun onDestroy() {
-        session?.isActive = false
-        session?.release()
-        session = null
         started = false
         super.onDestroy()
     }

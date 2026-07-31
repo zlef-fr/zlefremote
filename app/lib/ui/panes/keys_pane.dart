@@ -149,8 +149,11 @@ class _KeysPaneState extends State<KeysPane> {
         const SizedBox(height: Z.s3),
         _specialKeys(l),
         const SizedBox(height: Z.s3),
-        _dpadAndShortcuts(l),
-        const SizedBox(height: Z.s4),
+        Center(child: _Dpad(onPress: _pressKey)),
+        const SizedBox(height: Z.s3),
+        ZSection(title: l.t('fkeys'), child: _functionKeys(l)),
+        ZSection(title: l.t('shortcuts'), child: _shortcuts(l)),
+        const SizedBox(height: Z.s3),
         const _ClipboardCard(),
       ],
     );
@@ -238,9 +241,6 @@ class _KeysPaneState extends State<KeysPane> {
             ],
           ],
         ),
-        const SizedBox(height: Z.s2),
-        Text(l.t('mods_hint'),
-            style: Z.mono.copyWith(fontSize: 11.5, color: Z.inkFaint)),
       ],
     );
   }
@@ -257,8 +257,6 @@ class _KeysPaneState extends State<KeysPane> {
       (l.t('key_pgdn'), 'pagedown'),
       (l.t('key_delete'), 'delete'),
       (l.t('key_space'), 'space'),
-      ('F5', 'f5'),
-      ('F11', 'f11'),
     ];
     return GridView.count(
       crossAxisCount: 4,
@@ -274,53 +272,35 @@ class _KeysPaneState extends State<KeysPane> {
     );
   }
 
-  /// Side by side when there is room, stacked when there isn't. Beside the
-  /// d-pad a phone in portrait leaves the shortcut chips ~200pt, which is not
-  /// enough for "Sélectionner tout" — and a chip whose label is cut in half is
-  /// worse than a chip on its own line.
-  Widget _dpadAndShortcuts(L10n l) => LayoutBuilder(
-        builder: (context, constraints) {
-          final shortcuts = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l.t('shortcuts').toUpperCase(), style: Z.eyebrow),
-              const SizedBox(height: Z.s2),
-              Wrap(
-                spacing: Z.s2,
-                runSpacing: Z.s2,
-                children: [
-                  _shortcut(l.t('sc_copy'), 'c', ['ctrl']),
-                  _shortcut(l.t('sc_paste'), 'v', ['ctrl']),
-                  _shortcut(l.t('sc_cut'), 'x', ['ctrl']),
-                  _shortcut(l.t('sc_undo'), 'z', ['ctrl']),
-                  _shortcut(l.t('sc_selectall'), 'a', ['ctrl']),
-                  _shortcut(l.t('sc_switch'), 'tab', ['alt']),
-                  _shortcut(l.t('sc_close'), 'f4', ['alt']),
-                  _shortcut(l.t('sc_lock'), 'l', ['meta']),
-                ],
-              ),
-            ],
-          );
-          final dpad = _Dpad(onPress: _pressKey);
-          if (constraints.maxWidth < 520) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: dpad),
-                const SizedBox(height: Z.s3),
-                shortcuts,
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              dpad,
-              const SizedBox(width: Z.s3),
-              Expanded(child: shortcuts),
-            ],
-          );
-        },
+  /// Every F-key, F1 through F12. They live behind a section header because
+  /// twelve more buttons is exactly the kind of thing that should be there when
+  /// you want it and invisible when you don't.
+  Widget _functionKeys(L10n l) => GridView.count(
+        crossAxisCount: 4,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: Z.s2,
+        crossAxisSpacing: Z.s2,
+        childAspectRatio: 2.1,
+        children: [
+          for (var i = 1; i <= 12; i++)
+            _Key(label: 'F$i', onTap: () => _pressKey('f$i')),
+        ],
+      );
+
+  Widget _shortcuts(L10n l) => Wrap(
+        spacing: Z.s2,
+        runSpacing: Z.s2,
+        children: [
+          _shortcut(l.t('sc_copy'), 'c', ['ctrl']),
+          _shortcut(l.t('sc_paste'), 'v', ['ctrl']),
+          _shortcut(l.t('sc_cut'), 'x', ['ctrl']),
+          _shortcut(l.t('sc_undo'), 'z', ['ctrl']),
+          _shortcut(l.t('sc_selectall'), 'a', ['ctrl']),
+          _shortcut(l.t('sc_switch'), 'tab', ['alt']),
+          _shortcut(l.t('sc_close'), 'f4', ['alt']),
+          _shortcut(l.t('sc_lock'), 'l', ['meta']),
+        ],
       );
 
   Widget _shortcut(String label, String key, List<String> mods) => ZChip(

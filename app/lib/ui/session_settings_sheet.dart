@@ -21,8 +21,13 @@ Future<void> showSessionSettings(BuildContext context, ZrSession session) {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SettingsControls(inSession: true),
-        ZSectionTitle(l.t('cap_why')),
-        _CapabilityReport(session: session),
+        ZSectionTitle(l.t('section_computer')),
+        _AgentUpdate(session: session),
+        const SizedBox(height: Z.s2),
+        ZSection(
+          title: l.t('cap_why'),
+          child: _CapabilityReport(session: session),
+        ),
       ],
     ),
   );
@@ -40,6 +45,7 @@ class _CapabilityReport extends StatelessWidget {
     ZrCap.brightnessMethod,
     ZrCap.clipboard,
     ZrCap.keyHold,
+    ZrCap.agentUpdate,
   ];
 
   @override
@@ -94,6 +100,70 @@ class _CapRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+
+/// Updating the computer's agent, from the computer's remote.
+///
+/// The phone already knows the agent is old — it is the thing comparing
+/// capabilities and printing "update the agent" — so making the user walk over
+/// and type a command was the wrong shape. An agent too old to accept the verb
+/// still gets said out loud, with the one command that fixes it forever.
+class _AgentUpdate extends StatelessWidget {
+  const _AgentUpdate({required this.session});
+  final ZrSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    return ListenableBuilder(
+      listenable: session,
+      builder: (context, _) {
+        final state = session.caps[ZrCap.agentUpdate];
+        if (state != ZrCapState.ready) {
+          return ZCapabilityNotice(cap: ZrCap.agentUpdate, state: state);
+        }
+        final status = switch (session.agentUpdate) {
+          ZrAgentUpdate.running => l.t('agent_update_running'),
+          ZrAgentUpdate.done => l.f('agent_update_done',
+              {'v': session.agentUpdateVersion ?? ''}),
+          ZrAgentUpdate.alreadyCurrent => l.t('agent_update_current'),
+          ZrAgentUpdate.failed => l.f('agent_update_failed',
+              {'reason': session.agentUpdateError ?? ''}),
+          ZrAgentUpdate.idle => '',
+        };
+        return ZCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ZButton(
+                label: l.t('agent_update'),
+                icon: Icons.system_update_alt_rounded,
+                kind: ZButtonKind.ghost,
+                expand: true,
+                loading: session.agentUpdate == ZrAgentUpdate.running,
+                onPressed: session.agentUpdate == ZrAgentUpdate.running
+                    ? null
+                    : session.updateAgent,
+              ),
+              if (status.isNotEmpty) ...[
+                const SizedBox(height: Z.s2),
+                Text(
+                  status,
+                  style: Z.bodySoft.copyWith(
+                    fontSize: 14.5,
+                    color: session.agentUpdate == ZrAgentUpdate.failed
+                        ? Z.danger
+                        : Z.inkMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

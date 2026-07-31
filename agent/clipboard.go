@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -42,6 +43,19 @@ func (noClipper) Write(s string) error  { return nil }
 type execClipper struct {
 	readCmd  []string
 	writeCmd []string
+	// extra environment for both commands, appended to the agent's own. Used
+	// on Wayland, where wl-copy/wl-paste need a WAYLAND_DISPLAY the agent's
+	// process may never have inherited.
+	env []string
+}
+
+// command builds one clipboard invocation with the backend's extra environment.
+func (c execClipper) command(ctx context.Context, argv []string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	if len(c.env) > 0 {
+		cmd.Env = append(os.Environ(), c.env...)
+	}
+	return cmd
 }
 
 func (c execClipper) Available() bool { return len(c.readCmd) > 0 && len(c.writeCmd) > 0 }
@@ -52,7 +66,7 @@ func (c execClipper) Read() (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, c.readCmd[0], c.readCmd[1:]...).Output()
+	out, err := c.command(ctx, c.readCmd).Output()
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +79,7 @@ func (c execClipper) Write(s string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, c.writeCmd[0], c.writeCmd[1:]...)
+	cmd := c.command(ctx, c.writeCmd)
 	cmd.Stdin = strings.NewReader(s)
 	return cmd.Run()
 }

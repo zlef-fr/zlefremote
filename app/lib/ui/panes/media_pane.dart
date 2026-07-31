@@ -249,8 +249,6 @@ class _MediaPaneState extends State<MediaPane> {
                   size: 18, color: Z.inkMuted),
             ],
           ),
-          Text(l.t('bright_floor_note'),
-              style: Z.mono.copyWith(fontSize: 11.5, color: Z.inkFaint)),
           if (perScreen != ZrCapState.ready) ...[
             const SizedBox(height: Z.s3),
             ZCapabilityNotice(

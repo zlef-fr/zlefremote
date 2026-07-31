@@ -23,6 +23,9 @@ extension ZrViewQualityParams on ZrViewQuality {
       .firstWhere((q) => q.name == s, orElse: () => ZrViewQuality.balanced);
 }
 
+/// State of an agent self-update the phone asked for.
+enum ZrAgentUpdate { idle, running, done, alreadyCurrent, failed }
+
 /// Why the live view has nothing to show.
 enum ZrViewProblem { none, unsupported, captureFailed }
 
@@ -56,6 +59,11 @@ class ZrSession extends ChangeNotifier {
 
   /// Text the computer put on its clipboard while we were watching.
   String? hostClipboard;
+
+  /// Progress of an agent update triggered from here.
+  ZrAgentUpdate agentUpdate = ZrAgentUpdate.idle;
+  String? agentUpdateVersion;
+  String? agentUpdateError;
 
   // ── live view ──────────────────────────────────────────────────────────────
   bool viewing = false;
@@ -115,6 +123,19 @@ class ZrSession extends ChangeNotifier {
         notifyListeners();
       case 'clip':
         hostClipboard = c['s'] as String?;
+        notifyListeners();
+      case 'updating':
+        agentUpdate = ZrAgentUpdate.running;
+        notifyListeners();
+      case 'updated':
+        agentUpdate = c['current'] == true
+            ? ZrAgentUpdate.alreadyCurrent
+            : ZrAgentUpdate.done;
+        agentUpdateVersion = c['v'] as String?;
+        notifyListeners();
+      case 'updateerr':
+        agentUpdate = ZrAgentUpdate.failed;
+        agentUpdateError = c['reason'] as String?;
         notifyListeners();
       case 'pong':
         final sent = _pingSentAt.remove((c['i'] as num?)?.toInt() ?? -1);
@@ -264,6 +285,16 @@ class ZrSession extends ChangeNotifier {
 
   /// Ask for the computer's clipboard right now.
   void pullClipboard() => send({'t': 'clipget'});
+
+  /// Ask the agent to update itself. The phone is the surface that knows the
+  /// agent is old — it is the one comparing capabilities — so it is the right
+  /// place to fix it from.
+  void updateAgent() {
+    agentUpdate = ZrAgentUpdate.running;
+    agentUpdateError = null;
+    notifyListeners();
+    send({'t': 'update'});
+  }
 
   // ── live view control ──────────────────────────────────────────────────────
 

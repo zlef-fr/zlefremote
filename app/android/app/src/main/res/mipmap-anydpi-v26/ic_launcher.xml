@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Foreground is the product's own icon (public/app/icons/icon-512.png),
+     re-sized by tool/gen_icons.py. Background is the zlef ground so the glyph
+     keeps its dark surround under any launcher mask. No monochrome entry: a
+     themed-icon silhouette of this glyph would have to be redrawn, and a wrong
+     silhouette is worse than none. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/zl_bg"/>
     <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-    <monochrome android:drawable="@drawable/ic_launcher_foreground"/>
 </adaptive-icon>

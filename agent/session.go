@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -150,6 +151,7 @@ type Session struct {
 	brightBusy          bool        // a worker goroutine is applying brightness
 	clipStop            chan struct{}
 	clipLast            string // last clipboard text seen or written (echo guard)
+	updating            bool   // a phone-triggered self-update is running
 }
 
 func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, send func(string)) *Session {
@@ -203,6 +205,9 @@ func (se *Session) Handle(frame string) {
 				// clipboard sharing. Older clients ignore them.
 				"keyhold": true,
 				"clip":    se.clip.Available(),
+				// this agent accepts {t:'update'} — the phone can update it
+				// instead of sending the user to the computer's keyboard.
+				"update": true,
 			},
 		}
 		for k, v := range se.brightSnapshot() {
@@ -257,6 +262,8 @@ func (se *Session) Handle(frame string) {
 		} else {
 			se.stopClipWatch()
 		}
+	case "update":
+		se.startUpdate()
 	case "ping":
 		// round-trip probe for the client's latency HUD; echo the id back.
 		se.sealSend(map[string]any{"t": "pong", "i": c.I})
@@ -273,6 +280,41 @@ func (se *Session) Handle(frame string) {
 			se.stopStream()
 		}
 	}
+}
+
+// startUpdate runs the agent's own updater because a phone asked it to.
+//
+// Updating from the controller is the point: the phone is the surface that
+// KNOWS the agent is old — it is the one comparing capabilities and telling the
+// user to update — so making the user walk to the computer and type a command
+// was the wrong shape. Serialized behind updating so a double tap can't run two
+// downloads over the same binary.
+func (se *Session) startUpdate() {
+	se.mu.Lock()
+	if se.updating {
+		se.mu.Unlock()
+		return
+	}
+	se.updating = true
+	se.mu.Unlock()
+
+	se.sealSend(map[string]any{"t": "updating"})
+	go func() {
+		newVersion, err := remoteUpdate()
+		se.mu.Lock()
+		se.updating = false
+		se.mu.Unlock()
+		switch {
+		case errors.Is(err, errAlreadyCurrent):
+			se.sealSend(map[string]any{"t": "updated", "v": version, "current": true})
+		case err != nil:
+			log.Printf("remote update failed: %v", err)
+			se.sealSend(map[string]any{"t": "updateerr", "reason": err.Error()})
+		default:
+			log.Printf("updated to %s on request from a phone — restart to use it", newVersion)
+			se.sealSend(map[string]any{"t": "updated", "v": newVersion})
+		}
+	}()
 }
 
 // moveAbs maps a normalized 0..1 point onto the display currently being

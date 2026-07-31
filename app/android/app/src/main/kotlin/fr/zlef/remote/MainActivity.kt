@@ -1,8 +1,10 @@
 package fr.zlef.remote
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -128,6 +130,8 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
 
+                    "isDeviceLocked" -> result.success(isDeviceLocked())
+
                     "canInstallPackages" -> result.success(canInstallPackages())
 
                     "installApk" -> {
@@ -158,6 +162,42 @@ class MainActivity : FlutterActivity() {
             notificationResult?.success(hasNotificationPermission())
             notificationResult = null
         }
+    }
+
+    /**
+     * Whether the keyguard is up right now. The activity is `showWhenLocked`,
+     * so it can be on screen in front of a locked phone — and what it may show
+     * there is not what it shows to someone who has unlocked it.
+     */
+    private fun isDeviceLocked(): Boolean {
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        return km.isKeyguardLocked
+    }
+
+    private fun reportLockState() {
+        emit(mapOf("type" to "keyguard", "locked" to isDeviceLocked()))
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // the manifest flags cover API 27+ declaratively; this keeps the
+        // behaviour when the activity is recreated by the system.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        reportLockState()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // dismissing the keyguard doesn't restart the activity, it just gives
+        // focus back — that is the moment the surface may unlock itself.
+        if (hasFocus) reportLockState()
     }
 
     private fun isBackgroundRestricted(): Boolean {

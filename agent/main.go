@@ -12,7 +12,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const version = "1.7.1"
+const version = "1.8.0"
 
 const banner = `
   ┌──────────────────────────────────────────┐
@@ -52,6 +52,7 @@ func main() {
 
 	// passive, best-effort "newer version available" hint (stderr only)
 	if !*noUpdateCheck && !machineMode {
+		updateHost = *relay
 		go checkUpdateNotice(*relay)
 	}
 

@@ -34,6 +34,9 @@ func newBrightener() Brightener {
 	}{
 		{"brightnessctl", "Backlight (brightnessctl)", "hardware", probeBrightnessctl},
 		{"sysfs", "Backlight (sysfs)", "hardware", probeSysfs},
+		// external monitors over the video cable — the only mechanism that
+		// reaches a desktop's screens at all
+		{"ddcutil", "External monitors (DDC/CI)", "hardware", probeDDCUtil},
 		{"xrandr", "Software dimming (xrandr)", "software", probeXrandr},
 	}
 	var avail []BrightBackend
@@ -308,5 +311,112 @@ func (x *xrandrBright) Set(display, pct int) {
 	x.mu.Unlock()
 	for _, o := range targets {
 		runOut(brightTimeout, "xrandr", "--output", o, "--brightness", v)
+	}
+}
+
+// ── DDC/CI (external monitors) ──────────────────────────────────────────────
+//
+// Backlight devices and xrandr gamma between them still miss the common case:
+// a desktop with monitors on a cable. Those answer DDC/CI, and ddcutil speaks
+// it. Reads are slow (an I²C round trip per monitor, ~200 ms), so the display
+// list is probed once at startup and only levels are re-read.
+//
+// ddcutil needs access to the i2c devices: on most distributions that means the
+// i2c-dev module loaded and the user in the `i2c` group. When it isn't set up
+// `detect` returns nothing and this backend simply doesn't appear.
+
+type ddcUtilBright struct{ buses []ddcBus }
+
+type ddcBus struct {
+	bus  string
+	name string
+}
+
+func probeDDCUtil() Brightener {
+	if !have("ddcutil") {
+		return nil
+	}
+	out, err := runOut(8*time.Second, "ddcutil", "detect", "--brief")
+	if err != nil || out == "" {
+		return nil
+	}
+	var buses []ddcBus
+	var current ddcBus
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "Display "):
+			if current.bus != "" {
+				buses = append(buses, current)
+			}
+			current = ddcBus{}
+		case strings.HasPrefix(trimmed, "I2C bus:"):
+			// "I2C bus: /dev/i2c-5" → the number is what --bus wants
+			if i := strings.LastIndex(trimmed, "-"); i >= 0 {
+				current.bus = strings.TrimSpace(trimmed[i+1:])
+			}
+		case strings.HasPrefix(trimmed, "Monitor:"):
+			// "Monitor: DEL:DELL U2515H:..." → keep the model
+			fields := strings.Split(strings.TrimPrefix(trimmed, "Monitor:"), ":")
+			if len(fields) >= 2 {
+				current.name = strings.TrimSpace(fields[1])
+			}
+		}
+	}
+	if current.bus != "" {
+		buses = append(buses, current)
+	}
+	if len(buses) == 0 {
+		return nil
+	}
+	return ddcUtilBright{buses: buses}
+}
+
+func (ddcUtilBright) Available() bool { return true }
+
+func (d ddcUtilBright) Screens() []BrightScreen {
+	screens := make([]BrightScreen, 0, len(d.buses))
+	for i, b := range d.buses {
+		name := b.name
+		if name == "" {
+			name = fmt.Sprintf("Monitor %d", i+1)
+		}
+		screens = append(screens, BrightScreen{Name: name, Pct: d.level(b)})
+	}
+	return screens
+}
+
+// level reads VCP feature 10 (luminance) as a percentage, -1 when the monitor
+// won't answer.
+func (d ddcUtilBright) level(b ddcBus) int {
+	out, err := runOut(6*time.Second, "ddcutil", "--bus", b.bus, "getvcp", "10", "--brief")
+	if err != nil {
+		return -1
+	}
+	// brief form: "VCP 10 C <current> <max>"
+	fields := strings.Fields(out)
+	if len(fields) < 5 {
+		return -1
+	}
+	current, err1 := strconv.Atoi(fields[3])
+	max, err2 := strconv.Atoi(fields[4])
+	if err1 != nil || err2 != nil || max <= 0 {
+		return -1
+	}
+	return current * 100 / max
+}
+
+func (d ddcUtilBright) Set(display, pct int) {
+	set := func(b ddcBus) {
+		runOut(6*time.Second, "ddcutil", "--bus", b.bus, "setvcp", "10", strconv.Itoa(pct))
+	}
+	if display < 0 {
+		for _, b := range d.buses {
+			set(b)
+		}
+		return
+	}
+	if display < len(d.buses) {
+		set(d.buses[display])
 	}
 }

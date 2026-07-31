@@ -56,6 +56,9 @@ class ZrNative {
   Future<bool> requestNotificationPermission() =>
       _call('requestNotificationPermission');
 
+  /// Whether the keyguard is up right now.
+  Future<bool> isDeviceLocked() => _call('isDeviceLocked');
+
   /// True when the OS has background-restricted this app. On that setting the
   /// foreground service survives but its socket does not: the session dies
   /// silently the moment the screen goes off.
@@ -81,7 +84,7 @@ class ZrNative {
   }
 }
 
-enum ZrNativeEventKind { media, volumeUp, volumeDown, stopRequested }
+enum ZrNativeEventKind { media, volumeUp, volumeDown, stopRequested, keyguard }
 
 class ZrNativeEvent {
   const ZrNativeEvent(this.kind, [this.value]);
@@ -98,6 +101,10 @@ class ZrNativeEvent {
       'volumeUp' => const ZrNativeEvent(ZrNativeEventKind.volumeUp),
       'volumeDown' => const ZrNativeEvent(ZrNativeEventKind.volumeDown),
       'stop' => const ZrNativeEvent(ZrNativeEventKind.stopRequested),
+      'keyguard' => ZrNativeEvent(
+          ZrNativeEventKind.keyguard,
+          raw['locked'] == true ? 'locked' : 'unlocked',
+        ),
       _ => null,
     };
   }

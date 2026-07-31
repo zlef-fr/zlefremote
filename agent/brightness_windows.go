@@ -16,12 +16,56 @@ import (
 //
 // Per-screen: both WMI classes are enumerated Sort-Object InstanceName so the
 // index the phone sends targets the same physical monitor in Get and Set.
+// newBrightener combines the two mechanisms Windows offers, because neither
+// covers a whole desk: WMI reaches the laptop's built-in panel and nothing
+// else, DDC/CI reaches the monitors on the cable. A machine can have both — a
+// docked laptop with an external screen is the normal case — so they are
+// concatenated into one screen list instead of forcing a choice.
 func newBrightener() Brightener {
-	b := wmiBright{}
-	if s := b.Screens(); len(s) == 0 || s[0].Pct < 0 {
+	wmi := wmiBright{}
+	wmiScreens := wmi.Screens()
+	hasWMI := len(wmiScreens) > 0 && wmiScreens[0].Pct >= 0
+
+	ddc, hasDDC := newDDCBrightener()
+
+	switch {
+	case hasWMI && hasDDC:
+		return combinedBright{wmi: wmi, wmiCount: len(wmiScreens), ddc: ddc}
+	case hasWMI:
+		return wmi
+	case hasDDC:
+		return ddc
+	default:
 		return noBright{}
 	}
-	return b
+}
+
+// combinedBright presents the internal panel(s) followed by the DDC/CI
+// monitors as a single ordered list, and routes an index to whichever
+// mechanism owns it.
+type combinedBright struct {
+	wmi      wmiBright
+	wmiCount int
+	ddc      ddcBright
+}
+
+func (combinedBright) Available() bool { return true }
+
+func (c combinedBright) Screens() []BrightScreen {
+	return append(c.wmi.Screens(), c.ddc.Screens()...)
+}
+
+func (c combinedBright) Set(display, pct int) {
+	if display < 0 {
+		c.wmi.Set(-1, pct)
+		c.ddc.Set(-1, pct)
+		return
+	}
+	if display < c.wmiCount {
+		c.wmi.Set(display, pct)
+		return
+	}
+	c.ddc.Set(display-c.wmiCount, pct)
 }
 
 const brightTimeout = 5 * time.Second // powershell startup is slow

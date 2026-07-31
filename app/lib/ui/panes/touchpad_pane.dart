@@ -35,6 +35,11 @@ class _TouchpadPaneState extends State<TouchpadPane>
   DateTime? _lastTapAt;
   bool _dragging = false;
   bool _twoFinger = false;
+  /// A three-finger gesture is a swipe, not a pointer move — once it starts,
+  /// nothing else on the pad may act on those fingers.
+  bool _threeFinger = false;
+  bool _threeFingerFired = false;
+  Offset? _threeFingerStart;
   Offset? _lastMidpoint;
   Offset _scrollRemainder = Offset.zero;
   bool _dragLock = false;
@@ -94,12 +99,24 @@ class _TouchpadPaneState extends State<TouchpadPane>
       _twoFinger = true;
       _lastMidpoint = _midpoint();
       setState(() => _glow = null);
+    } else if (_pointers.length == 3) {
+      _threeFinger = true;
+      _threeFingerFired = false;
+      _threeFingerStart = _centroid();
+      _twoFinger = false;
+      _lastMidpoint = null;
+      setState(() => _glow = null);
     }
   }
 
   void _onMove(PointerMoveEvent e) {
     if (!_pointers.containsKey(e.pointer)) return;
     _pointers[e.pointer] = e.localPosition;
+
+    if (_threeFinger && _pointers.length >= 3) {
+      _trackThreeFinger();
+      return;
+    }
 
     if (_twoFinger && _pointers.length >= 2) {
       final mid = _midpoint();
@@ -136,6 +153,23 @@ class _TouchpadPaneState extends State<TouchpadPane>
     _pointers.remove(e.pointer);
     final held = DateTime.now().difference(_gestureStart);
     final quick = held < _tapWindow && _travelled < _tapSlop;
+
+    // a three-finger gesture owns the whole touch: lifting a finger ends it,
+    // and none of the click/scroll paths below may claim the remainder.
+    if (_threeFinger) {
+      if (wasCount == 3 && !_threeFingerFired && quick) {
+        // three-finger tap → middle click, the mouse button phones don't have
+        _session.click('middle');
+        _haptic(1);
+      }
+      if (_pointers.isEmpty) {
+        _threeFinger = false;
+        _threeFingerFired = false;
+        _threeFingerStart = null;
+        _endGesture();
+      }
+      return;
+    }
 
     if (_dragging && _pointers.isEmpty) {
       _dragging = false;
@@ -175,6 +209,9 @@ class _TouchpadPaneState extends State<TouchpadPane>
 
   void _endGesture() {
     _twoFinger = false;
+    _threeFinger = false;
+    _threeFingerFired = false;
+    _threeFingerStart = null;
     _lastMidpoint = null;
     _scrollRemainder = Offset.zero;
     setState(() {
@@ -186,6 +223,38 @@ class _TouchpadPaneState extends State<TouchpadPane>
   Offset _midpoint() {
     final points = _pointers.values.toList();
     return (points[0] + points[1]) / 2;
+  }
+
+  Offset _centroid() {
+    final points = _pointers.values.toList();
+    var sum = Offset.zero;
+    for (final p in points) {
+      sum += p;
+    }
+    return sum / points.length.toDouble();
+  }
+
+  /// Three fingers = the desktop gestures a trackpad has and a phone doesn't:
+  /// swipe left/right switches window, up opens the overview, down shows the
+  /// desktop. One shot per gesture — a swipe is a verb, not a stream.
+  void _trackThreeFinger() {
+    if (_threeFingerFired) return;
+    final start = _threeFingerStart;
+    if (start == null) return;
+    final delta = _centroid() - start;
+    const threshold = 46.0;
+    if (delta.distance < threshold) return;
+
+    _threeFingerFired = true;
+    _haptic(2);
+    if (delta.dx.abs() > delta.dy.abs()) {
+      // Alt+Tab / Alt+Shift+Tab: window switching on every desktop we target
+      _session.key('tab', mods: delta.dx > 0 ? ['alt'] : ['alt', 'shift']);
+    } else if (delta.dy < 0) {
+      _session.key('up', mods: ['meta']); // overview / mission control
+    } else {
+      _session.key('d', mods: ['meta']); // show desktop
+    }
   }
 
   /// Small movements stay precise, big ones cover ground — the same curve the

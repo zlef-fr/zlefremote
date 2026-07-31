@@ -76,8 +76,7 @@ const Map<String, String> stringsFr = {
   'tab_screen': 'Écran',
   'tab_keys': 'Clavier',
   'tab_media': 'Média',
-  'pad_hint':
-      'Glissez pour bouger · tapez pour cliquer · tap à 2 doigts = clic droit · 2 doigts pour défiler',
+  'pad_hint': 'Glissez · tapez · 2 doigts défilent · 3 doigts changent d’app',
   'btn_left': 'Gauche',
   'btn_right': 'Droit',
   'btn_mid': 'Milieu',
@@ -116,6 +115,7 @@ const Map<String, String> stringsFr = {
   'mod_meta': 'Win/⌘',
   'mods_hint':
       'Touchez un modificateur, puis une touche — il se désactive après un appui.',
+  'fkeys': 'Touches F',
   'shortcuts': 'Raccourcis',
   'sc_copy': 'Copier',
   'sc_paste': 'Coller',
@@ -162,9 +162,10 @@ const Map<String, String> stringsFr = {
   'haptics_note': 'Une brève vibration aux clics et aux touches.',
   'keep_awake': 'Garder l’écran allumé',
   'keep_awake_note': 'Tant qu’un ordinateur est connecté.',
+  'lock_unlock_for_more': 'Déverrouillez pour le trackpad et le clavier',
   'lock_controls': 'Contrôles sur l’écran verrouillé',
   'lock_controls_note':
-      'Place lecture, piste suivante et volume de l’ordinateur dans le volet de notifications et sur l’écran verrouillé. Contrairement à l’ancienne web-app, cela ne prend aucun focus audio : la musique du téléphone continue.',
+      'Affiche lecture et volume par-dessus l’écran verrouillé, comme une app de navigation — sans déverrouiller, et sans emprunter la carte du lecteur de musique. Le trackpad, le clavier et vos ordinateurs enregistrés restent derrière le verrou. Désactivez si vous préférez que le téléphone n’affiche rien tant qu’il est verrouillé.',
   'volume_keys': 'Le volume du téléphone pilote l’ordinateur',
   'volume_keys_note':
       'Pendant une session, les boutons de volume changent le volume de l’ordinateur au lieu de celui du téléphone.',
@@ -222,6 +223,15 @@ const Map<String, String> stringsFr = {
       'Cette version d’Android n’affichera pas la carte média.',
   'grant_permission': 'Autoriser les notifications',
 
+  'cap_agentUpdate_title': 'Mettre à jour l’agent de l’ordinateur',
+  'cap_agentUpdate_agentOld':
+      'Cet agent est trop ancien pour être mis à jour d’ici. Sur l’ordinateur, lancez zlefremote-agent -update une fois ; ensuite ce bouton s’en charge.',
+  'agent_update': 'Mettre à jour l’agent',
+  'agent_update_running': 'Mise à jour de l’agent…',
+  'agent_update_done': 'Mis à jour en {v} — relancez l’agent sur l’ordinateur pour en profiter.',
+  'agent_update_current': 'L’agent est déjà à jour.',
+  'agent_update_failed': 'Échec de la mise à jour : {reason}',
+  'section_computer': 'Cet ordinateur',
   'cap_backgroundSession_title': 'Session écran éteint',
   'cap_backgroundSession_needsPermission':
       'Android restreint cette app en arrière-plan : la connexion à votre ordinateur est coupée dès que l’écran s’éteint — la session paraît vivante et ne répond plus. Autorisez l’activité en arrière-plan (Réglages › Batterie › sans restriction) pour la conserver.',

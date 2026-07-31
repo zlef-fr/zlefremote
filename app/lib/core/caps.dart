@@ -37,6 +37,7 @@ enum ZrCap {
   lockScreenControls,
   volumeKeys,
   backgroundSession,
+  agentUpdate,
 }
 
 class ZrCapabilities {
@@ -143,6 +144,10 @@ class ZrCapabilities {
             : ZrCapState.agentOld,
         ZrCap.multiMonitor:
             screens.length > 1 ? ZrCapState.ready : ZrCapState.hostLacks,
+        // updating from here needs an agent that accepts the verb; older ones
+        // have to be updated at the keyboard, which is what the notice says.
+        ZrCap.agentUpdate:
+            cap['update'] == true ? ZrCapState.ready : ZrCapState.agentOld,
       },
       screens: screens,
       brightScreens: brightScreens,

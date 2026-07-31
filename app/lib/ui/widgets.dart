@@ -301,7 +301,10 @@ class ZToggle extends StatelessWidget {
 }
 
 /// Label + explanation + control, the settings row used everywhere.
-class ZRow extends StatelessWidget {
+/// A settings row. The explanation is real but it is not on screen by default:
+/// a row of prose under every toggle turns a settings page into a document.
+/// The ⓘ reveals it for the one setting the user is actually wondering about.
+class ZRow extends StatefulWidget {
   const ZRow({
     super.key,
     required this.title,
@@ -318,35 +321,61 @@ class ZRow extends StatelessWidget {
   final bool dimmed;
 
   @override
+  State<ZRow> createState() => _ZRowState();
+}
+
+class _ZRowState extends State<ZRow> {
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: Opacity(
-        opacity: dimmed ? .55 : 1,
+        opacity: widget.dimmed ? .55 : 1,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Z.s3),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Z.body),
-                    if (note != null) ...[
-                      const SizedBox(height: Z.s1),
-                      Text(note!,
-                          style: Z.bodySoft
-                              .copyWith(fontSize: 14.5, color: Z.inkMuted)),
-                    ],
+              Row(
+                children: [
+                  Expanded(child: Text(widget.title, style: Z.body)),
+                  if (widget.note != null)
+                    GestureDetector(
+                      onTap: () => setState(() => _open = !_open),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: Z.s2),
+                        child: Icon(
+                          _open
+                              ? Icons.info_rounded
+                              : Icons.info_outline_rounded,
+                          size: 18,
+                          color: _open ? Z.oliveSoft : Z.inkFaint,
+                        ),
+                      ),
+                    ),
+                  if (widget.trailing != null) ...[
+                    const SizedBox(width: Z.s2),
+                    widget.trailing!,
                   ],
-                ),
+                ],
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: Z.s4),
-                trailing!,
-              ],
+              AnimatedSize(
+                duration: Z.fast,
+                curve: Z.ease,
+                alignment: Alignment.topLeft,
+                child: _open && widget.note != null
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: Z.s2, right: Z.s6),
+                        child: Text(widget.note!,
+                            style: Z.bodySoft
+                                .copyWith(fontSize: 14.5, color: Z.inkMuted)),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
             ],
           ),
         ),
@@ -444,7 +473,7 @@ enum ZTone { good, working, bad }
 /// Renders an unavailable feature as a visible, inert card carrying its name,
 /// the reason it cannot run, and — when there is one — the fix. Used for host
 /// capabilities and for phone-side permissions alike.
-class ZCapabilityNotice extends StatelessWidget {
+class ZCapabilityNotice extends StatefulWidget {
   const ZCapabilityNotice({
     super.key,
     required this.cap,
@@ -461,6 +490,19 @@ class ZCapabilityNotice extends StatelessWidget {
   final bool compact;
 
   @override
+  State<ZCapabilityNotice> createState() => _ZCapabilityNoticeState();
+}
+
+class _ZCapabilityNoticeState extends State<ZCapabilityNotice> {
+  bool _open = false;
+
+  ZrCap get cap => widget.cap;
+  ZrCapState get state => widget.state;
+  VoidCallback? get action => widget.action;
+  String? get actionLabel => widget.actionLabel;
+  bool get compact => widget.compact;
+
+  @override
   Widget build(BuildContext context) {
     final l = L10n.of(context);
     final reason = l.capReason(cap, state);
@@ -473,63 +515,157 @@ class ZCapabilityNotice extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                state == ZrCapState.agentOld
-                    ? Icons.upgrade_rounded
-                    : Icons.info_outline_rounded,
-                size: 18,
-                color: tone,
-              ),
-              const SizedBox(width: Z.s2),
-              Expanded(
-                child: Text(
-                  l.capTitle(cap),
-                  style: Z.body.copyWith(fontWeight: FontWeight.w600),
+          GestureDetector(
+            onTap: () => setState(() => _open = !_open),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Icon(
+                  state == ZrCapState.agentOld
+                      ? Icons.upgrade_rounded
+                      : Icons.info_outline_rounded,
+                  size: 18,
+                  color: tone,
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Z.surface3,
-                  borderRadius: BorderRadius.circular(Z.rSm),
-                  border: Border.all(color: Z.line),
+                const SizedBox(width: Z.s2),
+                Expanded(
+                  child: Text(
+                    l.capTitle(cap),
+                    style: Z.body.copyWith(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                child: Text(l.t('cap_unavailable'),
-                    style: Z.mono.copyWith(fontSize: 11.5, color: tone)),
-              ),
-            ],
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Z.surface3,
+                    borderRadius: BorderRadius.circular(Z.rSm),
+                    border: Border.all(color: Z.line),
+                  ),
+                  child: Text(l.t('cap_unavailable'),
+                      style: Z.mono.copyWith(fontSize: 11.5, color: tone)),
+                ),
+                const SizedBox(width: Z.s2),
+                Icon(
+                  _open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  size: 20,
+                  color: Z.inkFaint,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: Z.s2),
-          Text(reason, style: Z.bodySoft.copyWith(fontSize: 15.5)),
-          if (state == ZrCapState.agentOld) ...[
-            const SizedBox(height: Z.s2),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Z.s3, vertical: Z.s2),
-              decoration: BoxDecoration(
-                color: Z.surface2,
-                borderRadius: BorderRadius.circular(Z.rSm),
-                border: Border.all(color: Z.line),
-              ),
-              child: Text(l.t('cap_agent_update_cmd'), style: Z.mono),
-            ),
-          ],
-          if (action != null && actionLabel != null) ...[
-            const SizedBox(height: Z.s3),
-            ZButton(
-              label: actionLabel!,
-              kind: ZButtonKind.ghost,
-              size: ZButtonSize.sm,
-              onPressed: action,
-            ),
-          ],
+          // The reason is one tap away, not on screen by default: the name of
+          // the feature plus "unavailable" already answers "is it me?", and
+          // the paragraph only matters to whoever wants to fix it.
+          AnimatedSize(
+            duration: Z.fast,
+            curve: Z.ease,
+            alignment: Alignment.topLeft,
+            child: !_open
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: Z.s2),
+                      Text(reason, style: Z.bodySoft.copyWith(fontSize: 15.5)),
+                      if (state == ZrCapState.agentOld) ...[
+                        const SizedBox(height: Z.s2),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: Z.s3, vertical: Z.s2),
+                          decoration: BoxDecoration(
+                            color: Z.surface2,
+                            borderRadius: BorderRadius.circular(Z.rSm),
+                            border: Border.all(color: Z.line),
+                          ),
+                          child: Text(l.t('cap_agent_update_cmd'),
+                              style: Z.mono),
+                        ),
+                      ],
+                      if (action != null && actionLabel != null) ...[
+                        const SizedBox(height: Z.s3),
+                        ZButton(
+                          label: actionLabel!,
+                          kind: ZButtonKind.ghost,
+                          size: ZButtonSize.sm,
+                          onPressed: action,
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// A titled block that starts closed. Everything the keyboard offers is
+/// reachable, but a phone screen shows what you asked for rather than the whole
+/// catalogue at once.
+class ZSection extends StatefulWidget {
+  const ZSection({
+    super.key,
+    required this.title,
+    required this.child,
+    this.initiallyOpen = false,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget child;
+  final bool initiallyOpen;
+  final Widget? trailing;
+
+  @override
+  State<ZSection> createState() => _ZSectionState();
+}
+
+class _ZSectionState extends State<ZSection> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _open = !_open);
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Z.s2),
+              child: Row(
+                children: [
+                  Expanded(
+                      child: Text(widget.title.toUpperCase(), style: Z.eyebrow)),
+                  ?widget.trailing,
+                  Icon(
+                    _open
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 20,
+                    color: Z.inkFaint,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: Z.fast,
+            curve: Z.ease,
+            alignment: Alignment.topCenter,
+            child: _open
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: Z.s2),
+                    child: widget.child,
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      );
 }
 
 /// Entrance: a short rise + fade, staggered by [index]. Honours the platform's
