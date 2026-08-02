@@ -13,6 +13,14 @@ type fakeInjector struct {
 	mu    sync.Mutex
 	moves [][2]int    // MoveAbs calls
 	keys  [][2]string // KeyToggle calls as (key, "down"|"up"), in order
+	taps  []keyTap    // KeyTap calls, in order
+	goos  string      // what HostInfo reports; "" = linux
+}
+
+// keyTap is one KeyTap call: the chord a gesture resolved to.
+type keyTap struct {
+	key  string
+	mods []string
 }
 
 func (f *fakeInjector) MoveRel(dx, dy int) {}
@@ -21,10 +29,19 @@ func (f *fakeInjector) MoveAbs(x, y int) {
 	f.moves = append(f.moves, [2]int{x, y})
 	f.mu.Unlock()
 }
-func (f *fakeInjector) Click(b string, d bool)      {}
-func (f *fakeInjector) Toggle(b string, down bool)  {}
-func (f *fakeInjector) Scroll(dx, dy int)           {}
-func (f *fakeInjector) KeyTap(k string, m []string) {}
+func (f *fakeInjector) Click(b string, d bool)     {}
+func (f *fakeInjector) Toggle(b string, down bool) {}
+func (f *fakeInjector) Scroll(dx, dy int)          {}
+func (f *fakeInjector) KeyTap(k string, m []string) {
+	f.mu.Lock()
+	f.taps = append(f.taps, keyTap{key: k, mods: append([]string(nil), m...)})
+	f.mu.Unlock()
+}
+func (f *fakeInjector) keyTaps() []keyTap {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]keyTap(nil), f.taps...)
+}
 func (f *fakeInjector) KeyToggle(k string, down bool) {
 	dir := "up"
 	if down {
@@ -41,8 +58,13 @@ func (f *fakeInjector) keyEvents() [][2]string {
 }
 func (f *fakeInjector) TypeStr(s string)           {}
 func (f *fakeInjector) Media(k string)             {}
-func (f *fakeInjector) ScreenSize() (int, int)     { return 1920, 1080 }
-func (f *fakeInjector) HostInfo() (string, string) { return "test-host", "linux" }
+func (f *fakeInjector) ScreenSize() (int, int) { return 1920, 1080 }
+func (f *fakeInjector) HostInfo() (string, string) {
+	if f.goos == "" {
+		return "test-host", "linux"
+	}
+	return "test-host", f.goos
+}
 func (f *fakeInjector) lastMove() ([2]int, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

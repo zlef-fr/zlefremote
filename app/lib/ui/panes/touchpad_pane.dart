@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/gestures.dart';
 import '../../core/i18n/i18n.dart';
 import '../../core/session.dart';
 import '../../core/settings.dart';
@@ -13,8 +14,15 @@ import '../theme.dart';
 ///
 /// Gesture vocabulary is the one people already know from a laptop: drag moves,
 /// tap clicks, tap-then-press drags, two fingers scroll, two-finger tap
-/// right-clicks. A dedicated rail on the right scrolls with one finger, because
-/// two-finger scrolling on a phone held one-handed is a stretch.
+/// right-clicks, a sideways two-finger flick goes back/forward, pinch zooms,
+/// and three fingers switch app / open the overview / show the desktop, with a
+/// three-finger tap for the middle button a phone has no room for. A dedicated
+/// rail on the right scrolls with one finger, because two-finger scrolling on a
+/// phone held one-handed is a stretch.
+///
+/// Every multi-finger verb travels as an INTENT (see core/gestures.dart) — the
+/// computer owns the keyboard shortcut, because it is the one that knows
+/// whether it is a Mac.
 class TouchpadPane extends StatefulWidget {
   const TouchpadPane({super.key});
 
@@ -28,6 +36,22 @@ class _TouchpadPaneState extends State<TouchpadPane>
   static const _tapWindow = Duration(milliseconds: 220);
   static const _tapDragWindow = Duration(milliseconds: 300);
 
+  /// A sideways two-finger flick is back/forward; a slower sideways drag is a
+  /// horizontal scroll. Only time and distance separate them, so the sideways
+  /// scroll is withheld for [_flickWindow] and then either flushed or spent.
+  static const _flickWindow = Duration(milliseconds: 300);
+  static const _flickDistance = 64.0;
+  static const _flickVerticalGiveUp = 26.0;
+
+  /// Fingers that change their spread by this much are pinching, not scrolling;
+  /// each further [_pinchStep] of spread is one zoom notch.
+  static const _pinchTrigger = 34.0;
+  static const _pinchStep = 56.0;
+  static const _pinchStepsPerFrame = 3;
+
+  /// A three-finger swipe fires once it has travelled this far.
+  static const _swipeThreshold = 46.0;
+
   final _pointers = <int, Offset>{};
   Offset? _last;
   double _travelled = 0;
@@ -35,6 +59,24 @@ class _TouchpadPaneState extends State<TouchpadPane>
   DateTime? _lastTapAt;
   bool _dragging = false;
   bool _twoFinger = false;
+
+  /// Travel of the two-finger gesture itself — [_travelled] only grows under a
+  /// single finger, so without this a fast scroll inside the tap window reads
+  /// as a two-finger tap and right-clicks.
+  double _twoTravel = 0;
+  DateTime _twoFingerStart = DateTime.now();
+  Offset? _twoFingerStartMid;
+  double? _twoStartSpread;
+
+  /// Sideways travel held back from the scroll while the flick is still
+  /// possible, and whether it still is.
+  double _flickDx = 0;
+  bool _flickOpen = false;
+  bool _flickFired = false;
+
+  /// Spread at which the last zoom notch fired; null until a pinch is declared.
+  double? _pinchAnchor;
+
   /// A three-finger gesture is a swipe, not a pointer move — once it starts,
   /// nothing else on the pad may act on those fingers.
   bool _threeFinger = false;
@@ -98,6 +140,14 @@ class _TouchpadPaneState extends State<TouchpadPane>
     } else if (_pointers.length == 2) {
       _twoFinger = true;
       _lastMidpoint = _midpoint();
+      _twoFingerStartMid = _lastMidpoint;
+      _twoFingerStart = DateTime.now();
+      _twoStartSpread = _spread();
+      _twoTravel = 0;
+      _flickDx = 0;
+      _flickOpen = _settings.gestures;
+      _flickFired = false;
+      _pinchAnchor = null;
       setState(() => _glow = null);
     } else if (_pointers.length == 3) {
       _threeFinger = true;
@@ -119,21 +169,7 @@ class _TouchpadPaneState extends State<TouchpadPane>
     }
 
     if (_twoFinger && _pointers.length >= 2) {
-      final mid = _midpoint();
-      final previous = _lastMidpoint;
-      if (previous != null) {
-        final delta = mid - previous;
-        final speed = _settings.scrollSpeed;
-        final direction = _settings.naturalScroll ? 1 : -1;
-        _scrollRemainder += Offset(delta.dx * speed, delta.dy * speed * direction);
-        final dx = _scrollRemainder.dx.truncateToDouble();
-        final dy = _scrollRemainder.dy.truncateToDouble();
-        if (dx != 0 || dy != 0) {
-          _session.scroll(dx, dy);
-          _scrollRemainder -= Offset(dx, dy);
-        }
-      }
-      _lastMidpoint = mid;
+      _trackTwoFinger();
       return;
     }
 
@@ -178,11 +214,23 @@ class _TouchpadPaneState extends State<TouchpadPane>
       return;
     }
 
-    if (wasCount == 2 && quick) {
-      _session.click('right');
-      if (_last != null) _ripple(_last!, right: true);
-      _haptic(1);
-      _twoFinger = false;
+    if (wasCount == 2) {
+      // a sideways flick that never became a scroll is back/forward
+      if (_flickOpen && !_flickFired && _flickDx.abs() >= _flickDistance) {
+        _flickFired = true;
+        _session
+            .gesture(_flickDx > 0 ? ZrGesture.navBack : ZrGesture.navForward);
+        _haptic(2);
+      } else if (quick &&
+          _twoTravel < _tapSlop &&
+          _pinchAnchor == null &&
+          !_flickFired) {
+        _session.click('right');
+        if (_last != null) _ripple(_last!, right: true);
+        _haptic(1);
+      }
+      // _twoFinger stays set until every finger is up: the one still down must
+      // not start moving the pointer, nor count as a one-finger tap.
       if (_pointers.isEmpty) _endGesture();
       return;
     }
@@ -213,6 +261,13 @@ class _TouchpadPaneState extends State<TouchpadPane>
     _threeFingerFired = false;
     _threeFingerStart = null;
     _lastMidpoint = null;
+    _twoFingerStartMid = null;
+    _twoStartSpread = null;
+    _pinchAnchor = null;
+    _flickOpen = false;
+    _flickFired = false;
+    _flickDx = 0;
+    _twoTravel = 0;
     _scrollRemainder = Offset.zero;
     setState(() {
       _glow = null;
@@ -225,6 +280,13 @@ class _TouchpadPaneState extends State<TouchpadPane>
     return (points[0] + points[1]) / 2;
   }
 
+  /// Distance between the first two fingers — the pinch signal.
+  double _spread() {
+    final points = _pointers.values.toList();
+    if (points.length < 2) return 0;
+    return (points[0] - points[1]).distance;
+  }
+
   Offset _centroid() {
     final points = _pointers.values.toList();
     var sum = Offset.zero;
@@ -234,26 +296,95 @@ class _TouchpadPaneState extends State<TouchpadPane>
     return sum / points.length.toDouble();
   }
 
+  /// Two fingers do three things, and they have to be told apart live:
+  /// pinching zooms, a quick sideways flick is back/forward, everything else
+  /// scrolls. Pinch wins as soon as the spread changes decisively; the sideways
+  /// component of a scroll is withheld until the flick window closes, so a
+  /// flick that turned into a drag still scrolls the distance it covered.
+  void _trackTwoFinger() {
+    final mid = _midpoint();
+    final previous = _lastMidpoint;
+    final spread = _spread();
+    final startSpread = _twoStartSpread;
+
+    if (_settings.gestures &&
+        _pinchAnchor == null &&
+        startSpread != null &&
+        (spread - startSpread).abs() > _pinchTrigger) {
+      _pinchAnchor =
+          startSpread + (spread > startSpread ? _pinchTrigger : -_pinchTrigger);
+      _flickOpen = false;
+      _flickDx = 0;
+      _haptic(1);
+    }
+    if (_pinchAnchor != null) {
+      _pinchTick(spread);
+      _lastMidpoint = mid;
+      return;
+    }
+
+    if (previous != null) {
+      final delta = mid - previous;
+      _twoTravel += delta.distance;
+      var dx = delta.dx;
+      if (_flickOpen) {
+        _flickDx += dx;
+        final elapsed = DateTime.now().difference(_twoFingerStart);
+        final vertical = ((mid - (_twoFingerStartMid ?? mid)).dy).abs();
+        if (elapsed > _flickWindow || vertical > _flickVerticalGiveUp) {
+          // not a flick after all — hand the withheld sideways scroll back
+          dx = _flickDx;
+          _flickOpen = false;
+          _flickDx = 0;
+        } else {
+          dx = 0;
+        }
+      }
+      final speed = _settings.scrollSpeed;
+      final direction = _settings.naturalScroll ? 1 : -1;
+      _scrollRemainder += Offset(dx * speed, delta.dy * speed * direction);
+      final sx = _scrollRemainder.dx.truncateToDouble();
+      final sy = _scrollRemainder.dy.truncateToDouble();
+      if (sx != 0 || sy != 0) {
+        _session.scroll(sx, sy);
+        _scrollRemainder -= Offset(sx, sy);
+      }
+    }
+    _lastMidpoint = mid;
+  }
+
+  /// One zoom notch per [_pinchStep] of spread, capped per frame so a fast
+  /// pinch can't machine-gun a dozen Ctrl+= at the computer.
+  void _pinchTick(double spread) {
+    var fired = 0;
+    while (fired < _pinchStepsPerFrame &&
+        (spread - _pinchAnchor!).abs() >= _pinchStep) {
+      final out = spread > _pinchAnchor!;
+      _pinchAnchor = _pinchAnchor! + (out ? _pinchStep : -_pinchStep);
+      _session.gesture(out ? ZrGesture.zoomIn : ZrGesture.zoomOut);
+      fired++;
+    }
+    if (fired > 0) _haptic();
+  }
+
   /// Three fingers = the desktop gestures a trackpad has and a phone doesn't:
   /// swipe left/right switches window, up opens the overview, down shows the
   /// desktop. One shot per gesture — a swipe is a verb, not a stream.
   void _trackThreeFinger() {
-    if (_threeFingerFired) return;
+    if (_threeFingerFired || !_settings.gestures) return;
     final start = _threeFingerStart;
     if (start == null) return;
     final delta = _centroid() - start;
-    const threshold = 46.0;
-    if (delta.distance < threshold) return;
+    if (delta.distance < _swipeThreshold) return;
 
     _threeFingerFired = true;
     _haptic(2);
     if (delta.dx.abs() > delta.dy.abs()) {
-      // Alt+Tab / Alt+Shift+Tab: window switching on every desktop we target
-      _session.key('tab', mods: delta.dx > 0 ? ['alt'] : ['alt', 'shift']);
+      _session.gesture(delta.dx > 0 ? ZrGesture.appNext : ZrGesture.appPrev);
     } else if (delta.dy < 0) {
-      _session.key('up', mods: ['meta']); // overview / mission control
+      _session.gesture(ZrGesture.overview);
     } else {
-      _session.key('d', mods: ['meta']); // show desktop
+      _session.gesture(ZrGesture.showDesktop);
     }
   }
 

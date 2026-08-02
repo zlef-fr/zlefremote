@@ -332,7 +332,7 @@ void main() {
         expect(sent.where((c) => c['t'] == 'scroll'), isNotEmpty,
             reason: 'two fingers must scroll');
 
-        // three fingers left → Alt+Shift+Tab
+        // three fingers left → previous app, as an intent
         sent.clear();
         final g1 = await tester.startGesture(pad.translate(-40, 0));
         final g2 = await tester.startGesture(pad);
@@ -347,8 +347,96 @@ void main() {
         await g2.up();
         await g3.up();
         await settle(tester);
+        final swipe = sent.where((c) => c['t'] == 'gesture');
+        expect(swipe, isNotEmpty, reason: 'three fingers must switch app');
+        expect(swipe.first['g'], 'app-prev');
+        expectClean(tester);
+        s.dispose();
+      });
+
+      testWidgets('control: two-finger flick goes back, pinch zooms — $tag',
+          (tester) async {
+        await sized(tester, viewport.value);
+        sent.clear();
+        final s = session();
+        await tester.pumpWidget(app(
+          ControlScreen(device: _device, session: s),
+          locale,
+        ));
+        await settle(tester);
+
+        final pad = tester.getCenter(find.byType(CustomPaint).first);
+
+        // a quick sideways flick is history, not a horizontal scroll — and the
+        // sideways scroll must have been withheld, or the page moved too.
+        final f1 = await tester.startGesture(pad.translate(-30, 20));
+        final f2 = await tester.startGesture(pad.translate(30, 20));
+        for (var i = 0; i < 6; i++) {
+          await f1.moveBy(const Offset(18, 0));
+          await f2.moveBy(const Offset(18, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await f1.up();
+        await f2.up();
+        await settle(tester);
+        final nav = sent.where((c) => c['t'] == 'gesture');
+        expect(nav, isNotEmpty, reason: 'a sideways flick must go back');
+        expect(nav.first['g'], 'nav-back');
+        expect(
+            sent.where((c) => c['t'] == 'scroll' && (c['dx'] as int) != 0),
+            isEmpty,
+            reason: 'the flick must not also scroll sideways');
+
+        // spreading two fingers is zoom, not scroll
+        sent.clear();
+        final p1 = await tester.startGesture(pad.translate(-20, 0));
+        final p2 = await tester.startGesture(pad.translate(20, 0));
+        for (var i = 0; i < 8; i++) {
+          await p1.moveBy(const Offset(-14, 0));
+          await p2.moveBy(const Offset(14, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await p1.up();
+        await p2.up();
+        await settle(tester);
+        expect(sent.where((c) => c['g'] == 'zoom-in'), isNotEmpty,
+            reason: 'a pinch out must zoom in');
+        expect(sent.where((c) => c['t'] == 'scroll'), isEmpty,
+            reason: 'a pinch must not scroll');
+        expectClean(tester);
+        s.dispose();
+      });
+
+      testWidgets('control: an old agent still gets the swipe, as a chord — '
+          '$tag', (tester) async {
+        await sized(tester, viewport.value);
+        sent.clear();
+        // agent 1.8 and older: no cap.gesture, so the phone resolves the chord
+        final s = session(welcome: _noGestureAgent);
+        await tester.pumpWidget(app(
+          ControlScreen(device: _device, session: s),
+          locale,
+        ));
+        await settle(tester);
+
+        final pad = tester.getCenter(find.byType(CustomPaint).first);
+        final g1 = await tester.startGesture(pad.translate(-40, 0));
+        final g2 = await tester.startGesture(pad);
+        final g3 = await tester.startGesture(pad.translate(40, 0));
+        for (var i = 0; i < 6; i++) {
+          await g1.moveBy(const Offset(14, 0));
+          await g2.moveBy(const Offset(14, 0));
+          await g3.moveBy(const Offset(14, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await g1.up();
+        await g2.up();
+        await g3.up();
+        await settle(tester);
+        expect(sent.where((c) => c['t'] == 'gesture'), isEmpty,
+            reason: 'an old agent would drop the verb');
         final chord = sent.where((c) => c['t'] == 'key' && c['k'] == 'tab');
-        expect(chord, isNotEmpty, reason: 'three fingers must switch app');
+        expect(chord, isNotEmpty, reason: 'the swipe must still switch app');
         expect((chord.first['mods'] as List).contains('alt'), isTrue);
         expectClean(tester);
         s.dispose();
@@ -582,12 +670,33 @@ const _fullyCapable = <String, dynamic>{
     'keyhold': true,
     'clip': true,
     'update': true,
+    'gesture': true,
   },
+  'gestures': ['app-next', 'app-prev', 'overview', 'show-desktop',
+    'nav-back', 'nav-forward', 'zoom-in', 'zoom-out'],
   'bright': 60,
   'brights': [
     {'name': 'eDP-1', 'v': 60},
     {'name': 'HDMI-1', 'v': 80},
   ],
+};
+
+/// Agent 1.8: everything but the gesture vocabulary, so the phone has to send
+/// the keyboard shortcut itself.
+const _noGestureAgent = <String, dynamic>{
+  'name': 'workstation',
+  'os': 'linux',
+  'screen': {'w': 1920, 'h': 1080},
+  'screens': [
+    {'w': 1920, 'h': 1080},
+  ],
+  'cap': {
+    'screen': true,
+    'bright': true,
+    'keyhold': true,
+    'clip': true,
+    'update': true,
+  },
 };
 
 const _capableOfNothing = <String, dynamic>{

@@ -79,6 +79,17 @@ const Map<String, String> stringsEn = {
   'tab_keys': 'Keyboard',
   'tab_media': 'Media',
   'pad_hint': 'Drag · tap · 2 fingers scroll · 3 fingers switch app',
+  'gesture_sheet': 'Gestures',
+  'gesture_two_scroll': 'Two fingers · scroll',
+  'gesture_two_tap': 'Two-finger tap · right click',
+  'gesture_two_flick': 'Two fingers flicked sideways · back / forward',
+  'gesture_pinch': 'Pinch · zoom in and out',
+  'gesture_three_side': 'Three fingers sideways · switch app',
+  'gesture_three_up': 'Three fingers up · overview',
+  'gesture_three_down': 'Three fingers down · show the desktop',
+  'gesture_three_tap': 'Three-finger tap · middle click',
+  'gesture_screen_three':
+      'On the screen tab: two fingers zoom this picture, three scroll the computer.',
   'btn_left': 'Left',
   'btn_right': 'Right',
   'btn_mid': 'Middle',
@@ -161,6 +172,9 @@ const Map<String, String> stringsEn = {
   'scroll_speed': 'Scroll speed',
   'natural_scroll': 'Natural scrolling',
   'natural_scroll_note': 'Content follows your finger, like a phone.',
+  'gestures': 'Multi-touch gestures',
+  'gestures_note':
+      'Three-finger swipes, the sideways two-finger flick, pinch to zoom. Scrolling and the two-finger right-click stay either way.',
   'section_phone': 'This phone',
   'haptics': 'Haptic feedback',
   'haptics_note': 'A short buzz on clicks and key presses.',
@@ -224,6 +238,10 @@ const Map<String, String> stringsEn = {
       'This computer can tap keys but not hold them, so shift-drag and key repeat won’t work.',
   'cap_keyHold_agentOld':
       'Holding keys needs agent 1.7 or newer. Taps work fine meanwhile; shift-drag and key repeat don’t.',
+
+  'cap_gestures_title': 'Gestures the computer resolves',
+  'cap_gestures_agentOld':
+      'Swipes still work: this phone sends the shortcut itself. Agent 1.9 or newer lets the computer choose it, which gets Macs and unusual desktops right.',
 
   'cap_multiMonitor_title': 'Multiple monitors',
   'cap_multiMonitor_hostLacks': 'This computer reports a single display.',

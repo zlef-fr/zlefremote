@@ -122,6 +122,7 @@ type cmd struct {
 	BD     *int     `json:"bd"`    // bright: target display index; nil/-1 = all screens
 	BE     string   `json:"be"`    // brightend: brightness backend id to switch to
 	I      int      `json:"i"`     // ping: echoed back in the pong (round-trip timing)
+	G      string   `json:"g"`     // gesture: semantic multi-touch intent (gestures.go)
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -208,7 +209,11 @@ func (se *Session) Handle(frame string) {
 				// this agent accepts {t:'update'} — the phone can update it
 				// instead of sending the user to the computer's keyboard.
 				"update": true,
+				// this agent resolves semantic gestures per-OS ({t:'gesture'}),
+				// so the phone doesn't have to guess Alt+Tab vs Cmd+Tab.
+				"gesture": true,
 			},
+			"gestures": gestureIDs,
 		}
 		for k, v := range se.brightSnapshot() {
 			welcome[k] = v
@@ -250,6 +255,8 @@ func (se *Session) Handle(frame string) {
 		se.inj.KeyToggle(c.K, true)
 	case "kup":
 		se.inj.KeyToggle(c.K, false)
+	case "gesture":
+		se.gesture(c.G)
 	case "text":
 		se.inj.TypeStr(c.S)
 	case "clip":
@@ -280,6 +287,18 @@ func (se *Session) Handle(frame string) {
 			se.stopStream()
 		}
 	}
+}
+
+// gesture resolves a semantic multi-touch intent against this computer's OS and
+// injects the chord. Unknown intents are dropped rather than guessed at — a
+// wrong chord on someone's desktop is worse than a gesture that does nothing.
+func (se *Session) gesture(id string) {
+	_, goos := se.inj.HostInfo()
+	a, ok := gestureFor(goos, id)
+	if !ok {
+		return
+	}
+	se.inj.KeyTap(a.Key, a.Mods)
 }
 
 // startUpdate runs the agent's own updater because a phone asked it to.

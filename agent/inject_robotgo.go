@@ -37,6 +37,8 @@ var keyMap = map[string]string{
 	"delete": "delete", "home": "home", "end": "end",
 	"pageup": "pageup", "pagedown": "pagedown", "space": "space",
 	"f5": "f5", "f11": "f11",
+	// tapped alone by the "overview" gesture on Linux (activities / launcher)
+	"meta": "cmd", "super": "cmd",
 }
 
 var modMap = map[string]string{

@@ -21,6 +21,11 @@ Future<void> showSessionSettings(BuildContext context, ZrSession session) {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SettingsControls(inSession: true),
+        const SizedBox(height: Z.s2),
+        ZSection(
+          title: l.t('gesture_sheet'),
+          child: const _GestureList(),
+        ),
         ZSectionTitle(l.t('section_computer')),
         _AgentUpdate(session: session),
         const SizedBox(height: Z.s2),
@@ -31,6 +36,46 @@ Future<void> showSessionSettings(BuildContext context, ZrSession session) {
       ],
     ),
   );
+}
+
+/// The gesture vocabulary, written down once.
+///
+/// It lives here rather than pinned over the pad: a strip of instructions on
+/// the control surface is read once and then in the way forever, but "what can
+/// I do with three fingers?" is a real question with one obvious place to look.
+class _GestureList extends StatelessWidget {
+  const _GestureList();
+
+  static const _lines = [
+    'gesture_two_scroll',
+    'gesture_two_tap',
+    'gesture_two_flick',
+    'gesture_pinch',
+    'gesture_three_side',
+    'gesture_three_up',
+    'gesture_three_down',
+    'gesture_three_tap',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L10n.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final key in _lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(l.t(key), style: Z.bodySoft.copyWith(fontSize: 14)),
+          ),
+        const SizedBox(height: 2),
+        Text(
+          l.t('gesture_screen_three'),
+          style: Z.bodySoft.copyWith(fontSize: 13, color: Z.inkFaint),
+        ),
+      ],
+    );
+  }
 }
 
 class _CapabilityReport extends StatelessWidget {
@@ -45,6 +90,7 @@ class _CapabilityReport extends StatelessWidget {
     ZrCap.brightnessMethod,
     ZrCap.clipboard,
     ZrCap.keyHold,
+    ZrCap.gestures,
     ZrCap.agentUpdate,
   ];
 

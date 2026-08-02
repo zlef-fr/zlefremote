@@ -4,7 +4,7 @@ publish_to: 'none'
 
 # versionName+versionCode. Bump both on every release; the in-app updater
 # compares versionCode against /api/app/release.
-version: 1.2.0+3
+version: 1.3.0+4
 
 environment:
   sdk: ^3.12.2

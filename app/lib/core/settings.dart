@@ -23,6 +23,13 @@ class ZrSettings extends ChangeNotifier {
   bool get naturalScroll => _prefs.getBool('natural_scroll') ?? true;
   set naturalScroll(bool v) => _set('natural_scroll', v);
 
+  /// The multi-finger verbs — three-finger swipes, the sideways two-finger
+  /// flick, pinch to zoom. Scrolling and the two-finger right-click are not in
+  /// here: those are how a trackpad works, not extras. Off leaves the pad
+  /// strictly pointer + scroll, for anyone whose grip keeps firing them.
+  bool get gestures => _prefs.getBool('gestures') ?? true;
+  set gestures(bool v) => _set('gestures', v);
+
   // ── feedback ───────────────────────────────────────────────────────────────
   bool get haptics => _prefs.getBool('haptics') ?? true;
   set haptics(bool v) => _set('haptics', v);

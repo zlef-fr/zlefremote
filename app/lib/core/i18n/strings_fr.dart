@@ -77,6 +77,17 @@ const Map<String, String> stringsFr = {
   'tab_keys': 'Clavier',
   'tab_media': 'Média',
   'pad_hint': 'Glissez · tapez · 2 doigts défilent · 3 doigts changent d’app',
+  'gesture_sheet': 'Gestes',
+  'gesture_two_scroll': 'Deux doigts · défiler',
+  'gesture_two_tap': 'Tap à deux doigts · clic droit',
+  'gesture_two_flick': 'Deux doigts balayés sur le côté · précédent / suivant',
+  'gesture_pinch': 'Pincer · zoomer et dézoomer',
+  'gesture_three_side': 'Trois doigts sur le côté · changer d’app',
+  'gesture_three_up': 'Trois doigts vers le haut · vue d’ensemble',
+  'gesture_three_down': 'Trois doigts vers le bas · afficher le bureau',
+  'gesture_three_tap': 'Tap à trois doigts · clic du milieu',
+  'gesture_screen_three':
+      'Onglet Écran : deux doigts zooment l’image, trois font défiler l’ordinateur.',
   'btn_left': 'Gauche',
   'btn_right': 'Droit',
   'btn_mid': 'Milieu',
@@ -157,6 +168,9 @@ const Map<String, String> stringsFr = {
   'scroll_speed': 'Vitesse de défilement',
   'natural_scroll': 'Défilement naturel',
   'natural_scroll_note': 'Le contenu suit le doigt, comme sur un téléphone.',
+  'gestures': 'Gestes multitouch',
+  'gestures_note':
+      'Balayages à trois doigts, balayage latéral à deux doigts, pincer pour zoomer. Le défilement et le clic droit à deux doigts restent dans tous les cas.',
   'section_phone': 'Ce téléphone',
   'haptics': 'Retour haptique',
   'haptics_note': 'Une brève vibration aux clics et aux touches.',
@@ -221,6 +235,10 @@ const Map<String, String> stringsFr = {
       'Cet ordinateur peut taper les touches mais pas les maintenir : Maj+glisser et la répétition ne fonctionneront pas.',
   'cap_keyHold_agentOld':
       'Maintenir une touche demande l’agent 1.7 ou plus récent. Les appuis simples marchent ; Maj+glisser et la répétition non.',
+
+  'cap_gestures_title': 'Gestes résolus par l’ordinateur',
+  'cap_gestures_agentOld':
+      'Les balayages fonctionnent quand même : le téléphone envoie lui-même le raccourci. Avec l’agent 1.9 ou plus récent, c’est l’ordinateur qui le choisit — indispensable sur Mac et sur les bureaux inhabituels.',
 
   'cap_multiMonitor_title': 'Plusieurs écrans',
   'cap_multiMonitor_hostLacks': 'Cet ordinateur ne déclare qu’un seul écran.',

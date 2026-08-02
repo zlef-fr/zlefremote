@@ -8,6 +8,10 @@
     sensitivity: parseFloat(localStorage.getItem('zr_sens') || '1.6'),
     scrollSpeed: parseFloat(localStorage.getItem('zr_scroll') || '1.0'),
     natural: localStorage.getItem('zr_natural') !== '0',
+    // the multi-finger verbs (three-finger swipes, sideways flick, pinch).
+    // Scrolling and the two-finger right-click are not in here: those are how
+    // a trackpad works, not extras.
+    gestures: localStorage.getItem('zr_gestures') !== '0',
   };
   const getCfg = () => cfg;
 
@@ -39,8 +43,11 @@
   $('lblSens').textContent = t('sensitivity');
   $('lblScroll').textContent = t('scroll_speed');
   $('lblNatural').textContent = t('natural_scroll');
+  $('lblGestures').textContent = t('gestures');
+  $('gesturesNote').textContent = t('gestures_note');
   $('secureNote').textContent = '🔒 ' + t('secure');
   $('sens').value = cfg.sensitivity; $('scrollSp').value = cfg.scrollSpeed; $('natural').checked = cfg.natural;
+  $('gestures').checked = cfg.gestures;
 
   // ── command sender ─────────────────────────────────────────────────────
   const send = (cmd) => { if (paired) ZRConn.send(cmd); };
@@ -51,7 +58,7 @@
   // ── live screen view ─────────────────────────────────────────────────────
   ZRScreen._t = t;
   ZRScreen.config({
-    send, canvas: $('screenCanvas'), hud: $('screenHud'),
+    send, cfg: getCfg, canvas: $('screenCanvas'), hud: $('screenHud'),
     msg: $('screenMsg'), stage: $('screenWrap'),
   });
   let screenHintShown = false;
@@ -147,6 +154,9 @@
       hideOverlay();
       setStatus(t('paired'), 'ok');
       $('hostName').textContent = c.name || '';
+      // agent 1.9+ resolves gesture intents against its own desktop; older ones
+      // get the chord from here instead, picked for the OS it just reported
+      ZRGestures.setHost(c.os, !!(c.cap && c.cap.gesture));
       vibrate(20);
       ZRMedia.start(c.name || '');
       // reveal the Screen tab only if this computer's agent can capture it;
@@ -484,6 +494,7 @@
   $('sens').addEventListener('input', (e) => { cfg.sensitivity = parseFloat(e.target.value); localStorage.setItem('zr_sens', e.target.value); });
   $('scrollSp').addEventListener('input', (e) => { cfg.scrollSpeed = parseFloat(e.target.value); localStorage.setItem('zr_scroll', e.target.value); });
   $('natural').addEventListener('change', (e) => { cfg.natural = e.target.checked; localStorage.setItem('zr_natural', e.target.checked ? '1' : '0'); });
+  $('gestures').addEventListener('change', (e) => { cfg.gestures = e.target.checked; localStorage.setItem('zr_gestures', e.target.checked ? '1' : '0'); });
 
   // lock-screen controls toggle — only shown where the browser supports it
   if (ZRMedia.supported()) {
