@@ -7,6 +7,7 @@ import 'caps.dart';
 import 'conn.dart';
 import 'crypto.dart';
 import 'devices.dart';
+import 'gestures.dart';
 
 /// Quality of the live screen stream. The agent clamps these, so the presets
 /// are advice, not a contract.
@@ -270,6 +271,20 @@ class ZrSession extends ChangeNotifier {
 
   void key(String name, {List<String> mods = const []}) =>
       send({'t': 'key', 'k': name, 'mods': mods});
+
+  /// Fire a multi-touch gesture as an intent — "switch app", not "Alt+Tab".
+  ///
+  /// The computer knows its own desktop, so agent 1.9+ picks the chord. Older
+  /// agents don't know the verb and would drop the frame, so the phone falls
+  /// back to sending the chord for the OS the agent reported.
+  void gesture(String id) {
+    if (caps.ready(ZrCap.gestures)) {
+      send({'t': 'gesture', 'g': id});
+      return;
+    }
+    final chord = fallbackChord(id, hostOs);
+    if (chord != null) key(chord.key, mods: chord.mods);
+  }
 
   void type(String text) => send({'t': 'text', 's': text});
 

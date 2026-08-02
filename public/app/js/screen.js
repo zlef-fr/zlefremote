@@ -4,6 +4,9 @@
 // the PC. Frames arrive already E2EE-decrypted as {t:'f', i,s,n,w,h,d}.
 const ZRScreen = (() => {
   let send = () => {};
+  // the trackpad's scroll preferences, shared so two fingers feel the same on
+  // both surfaces
+  let cfg = () => ({ scrollSpeed: 1, natural: true });
   let canvas = null, ctx = null, hud = null, msgEl = null, stageEl = null;
   let active = false, tuning = false;
 
@@ -39,6 +42,7 @@ const ZRScreen = (() => {
 
   function config(opts) {
     send = opts.send || send;
+    cfg = opts.cfg || cfg;
     canvas = opts.canvas; ctx = canvas.getContext('2d', { alpha: false });
     hud = opts.hud; msgEl = opts.msg; stageEl = opts.stage;
     attachTouch();
@@ -170,17 +174,39 @@ const ZRScreen = (() => {
     let startPos = null, startT = 0, moved = 0, last = null, n2 = false;
     let moveThrottle = 0;
     let lastTapT = 0, lastTapPos = null;
+    // two fingers scroll the computer here — the picture is the computer's own
+    // screen, so there is nothing local to pan and the wheel is what's missing
+    let twoMid = null, twoTravel = 0, scrollAccum = 0;
+    const midOf = (touches) => ({
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2,
+    });
 
     const opts = { passive: false };
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      if (e.touches.length === 2) { n2 = true; return; }
+      if (e.touches.length === 2) {
+        n2 = true; twoMid = midOf(e.touches); twoTravel = 0; scrollAccum = 0;
+        return;
+      }
       const t = e.touches[0];
       startPos = { x: t.clientX, y: t.clientY }; last = startPos; startT = Date.now(); moved = 0; n2 = e.touches.length > 1;
     }, opts);
 
     canvas.addEventListener('touchmove', (e) => {
       e.preventDefault();
+      if (e.touches.length >= 2) {
+        if (!twoMid) { twoMid = midOf(e.touches); return; }
+        const mid = midOf(e.touches);
+        const dy = mid.y - twoMid.y;
+        twoTravel += Math.abs(dy) + Math.abs(mid.x - twoMid.x);
+        twoMid = mid;
+        const c = cfg();
+        scrollAccum += dy * (c.scrollSpeed || 1) * (c.natural ? 1 : -1);
+        const step = Math.trunc(scrollAccum);
+        if (step) { send({ t: 'scroll', dx: 0, dy: step }); scrollAccum -= step; }
+        return;
+      }
       if (e.touches.length !== 1 || !last) return;
       const t = e.touches[0];
       moved += Math.hypot(t.clientX - last.x, t.clientY - last.y);
@@ -196,9 +222,9 @@ const ZRScreen = (() => {
       e.preventDefault();
       const dt = Date.now() - startT;
       const quick = dt < TAP_MS && moved < SLOP;
-      if (n2) { // two-finger tap → right click at last point
-        if (quick && last) { const p = normAt(last.x, last.y); send({ t: 'clickabs', nx: p.nx, ny: p.ny, b: 'right' }); haptic(10); }
-        if (e.touches.length === 0) n2 = false;
+      if (n2) { // two-finger tap → right click, unless those fingers scrolled
+        if (quick && twoTravel < SLOP && last) { const p = normAt(last.x, last.y); send({ t: 'clickabs', nx: p.nx, ny: p.ny, b: 'right' }); haptic(10); }
+        if (e.touches.length === 0) { n2 = false; twoMid = null; twoTravel = 0; scrollAccum = 0; }
         return;
       }
       if (quick && last) {
@@ -210,9 +236,9 @@ const ZRScreen = (() => {
         haptic(dbl ? 16 : 8);
         lastTapT = dbl ? 0 : now; lastTapPos = dbl ? null : last;
       }
-      if (e.touches.length === 0) { startPos = null; last = null; n2 = false; }
+      if (e.touches.length === 0) { startPos = null; last = null; n2 = false; twoMid = null; }
     }, opts);
-    canvas.addEventListener('touchcancel', () => { startPos = null; last = null; n2 = false; }, opts);
+    canvas.addEventListener('touchcancel', () => { startPos = null; last = null; n2 = false; twoMid = null; }, opts);
   }
   function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch {} }
 

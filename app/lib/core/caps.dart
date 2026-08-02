@@ -34,6 +34,7 @@ enum ZrCap {
   clipboard,
   keyHold,
   multiMonitor,
+  gestures,
   lockScreenControls,
   volumeKeys,
   backgroundSession,
@@ -144,6 +145,11 @@ class ZrCapabilities {
             : ZrCapState.agentOld,
         ZrCap.multiMonitor:
             screens.length > 1 ? ZrCapState.ready : ZrCapState.hostLacks,
+        // agent 1.9+ resolves gesture intents against its own desktop. Older
+        // ones still get the swipes — the phone sends the chord itself — so
+        // this state only ever explains "your computer picks the shortcuts".
+        ZrCap.gestures:
+            cap['gesture'] == true ? ZrCapState.ready : ZrCapState.agentOld,
         // updating from here needs an agent that accepts the verb; older ones
         // have to be updated at the keyboard, which is what the notice says.
         ZrCap.agentUpdate:

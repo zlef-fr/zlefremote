@@ -37,6 +37,13 @@ class _ScreenPaneState extends State<ScreenPane> {
   DateTime? _lastTapAt;
   Offset? _lastTapAt2;
   bool _multi = false;
+
+  /// Three fingers scroll the computer (two are taken by zoom-and-pan). Like
+  /// the trackpad's three-finger gesture it owns the touch: no click may come
+  /// out of the fingers that scrolled.
+  bool _threeFinger = false;
+  Offset? _lastCentroid;
+  Offset _scrollRemainder = Offset.zero;
   DateTime _lastMoveSent = DateTime.fromMillisecondsSinceEpoch(0);
 
   double _zoom = 1;
@@ -113,12 +120,39 @@ class _ScreenPaneState extends State<ScreenPane> {
       _pinchStartZoom = _zoom;
       _pinchStartMid = (points[0] + points[1]) / 2;
       _panAtPinchStart = _pan;
+    } else if (_pointers.length == 3) {
+      // Two fingers already mean zoom-and-pan THIS picture, so the remote
+      // scroll wheel moves up a finger: three fingers scroll the computer.
+      _threeFinger = true;
+      _lastCentroid = _centroid();
+      _scrollRemainder = Offset.zero;
     }
   }
 
   void _onMove(PointerMoveEvent e, ui.Image? image) {
     if (!_pointers.containsKey(e.pointer)) return;
     _pointers[e.pointer] = e.localPosition;
+
+    if (_threeFinger && _pointers.length >= 3) {
+      final centroid = _centroid();
+      final previous = _lastCentroid;
+      if (previous != null) {
+        final settings = context.read<ZrSettings>();
+        final speed = settings.scrollSpeed;
+        final direction = settings.naturalScroll ? 1 : -1;
+        final delta = centroid - previous;
+        _scrollRemainder +=
+            Offset(delta.dx * speed, delta.dy * speed * direction);
+        final dx = _scrollRemainder.dx.truncateToDouble();
+        final dy = _scrollRemainder.dy.truncateToDouble();
+        if (dx != 0 || dy != 0) {
+          _session.scroll(dx, dy);
+          _scrollRemainder -= Offset(dx, dy);
+        }
+      }
+      _lastCentroid = centroid;
+      return;
+    }
 
     if (_pointers.length >= 2) {
       final points = _pointers.values.toList();
@@ -148,11 +182,25 @@ class _ScreenPaneState extends State<ScreenPane> {
     }
   }
 
+  Offset _centroid() {
+    var sum = Offset.zero;
+    for (final p in _pointers.values) {
+      sum += p;
+    }
+    return sum / _pointers.length.toDouble();
+  }
+
   void _onUp(PointerUpEvent e, ui.Image? image) {
     final wasCount = _pointers.length;
     _pointers.remove(e.pointer);
     final quick = DateTime.now().difference(_touchStart) < _tapWindow &&
         _travelled < _tapSlop;
+
+    if (_threeFinger) {
+      _lastCentroid = _pointers.length >= 2 ? _centroid() : null;
+      if (_pointers.isEmpty) _reset();
+      return;
+    }
 
     if (wasCount == 2 && quick && _lastSingle != null) {
       final n = _normalize(_lastSingle!, image);
@@ -175,10 +223,15 @@ class _ScreenPaneState extends State<ScreenPane> {
       }
     }
 
-    if (_pointers.isEmpty) {
-      _multi = false;
-      _pinchStartDistance = null;
-    }
+    if (_pointers.isEmpty) _reset();
+  }
+
+  void _reset() {
+    _multi = false;
+    _pinchStartDistance = null;
+    _threeFinger = false;
+    _lastCentroid = null;
+    _scrollRemainder = Offset.zero;
   }
 
   // ── build ──────────────────────────────────────────────────────────────────
@@ -231,7 +284,7 @@ class _ScreenPaneState extends State<ScreenPane> {
                     onPointerUp: (e) => _onUp(e, image),
                     onPointerCancel: (e) {
                       _pointers.remove(e.pointer);
-                      if (_pointers.isEmpty) _multi = false;
+                      if (_pointers.isEmpty) _reset();
                     },
                     behavior: HitTestBehavior.opaque,
                     child: CustomPaint(

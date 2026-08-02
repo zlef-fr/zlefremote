@@ -36,6 +36,37 @@ Four pieces:
    link on a computer for the [browser desktop remote](#desktop-remote--in-the-browser).
 3. The phone becomes a trackpad + keyboard + media remote — and a **live screen**.
 
+### Multi-touch gestures
+
+The trackpad speaks a laptop trackpad's vocabulary, and the computer decides
+what each gesture means:
+
+| Gesture | What it does |
+| --- | --- |
+| one finger | move the pointer · tap = left click · tap-then-press = drag |
+| two fingers | scroll · tap = right click |
+| two fingers flicked sideways | back / forward |
+| pinch | zoom in / out |
+| three fingers sideways | switch app |
+| three fingers up / down | overview / show the desktop |
+| three-finger tap | middle click |
+
+Multi-finger verbs cross the wire as **intents**, not keystrokes:
+`{t:'gesture', g:'app-next'}`. The agent resolves the intent against its own
+desktop, because only it knows whether it is a Mac — `app-next` is Alt+Tab on
+Linux and Windows and Cmd+Tab on macOS, `overview` is the Super key, Win+Tab or
+Ctrl+↑, `show-desktop` is Super+D or F11. The vocabulary an agent understands is
+listed in its pairing handshake (`gestures`, plus `cap.gesture`); clients talking
+to an agent older than **1.9** send the chord themselves instead, so the swipes
+still work — just resolved by the phone, which has to guess the desktop.
+
+Gestures can be turned off in settings; scrolling and the two-finger right-click
+stay either way, since those are how a trackpad works rather than extras.
+
+On the **Screen** tab the picture itself is zoomable, so the fingers shift up:
+two fingers pinch-zoom and pan the view (in the native app), and three fingers
+scroll the computer.
+
 ### Display brightness
 
 The Media tab shows a **screen-brightness slider** when the computer exposes a
@@ -58,6 +89,8 @@ and drive it like a touchscreen:
 
 - **Tap** = left click at that point · **double-tap** = double click ·
   **two-finger tap** = right click · **drag your finger** = move the pointer live.
+- **Scroll** the computer without leaving the view: two fingers in the browser
+  client, three in the native app (where two fingers pinch-zoom the picture).
 - Three quality presets — **Low / Balanced / Sharp** (trade frame rate and
   sharpness for bandwidth); retune live from the bar under the view.
 - **Multi-monitor**: computers with several displays get a monitor picker under

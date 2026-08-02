@@ -83,6 +83,14 @@ class _SettingsControlsState extends State<SettingsControls> {
             onChanged: (v) => settings.naturalScroll = v,
           ),
         ),
+        ZRow(
+          title: l.t('gestures'),
+          note: l.t('gestures_note'),
+          trailing: ZToggle(
+            value: settings.gestures,
+            onChanged: (v) => settings.gestures = v,
+          ),
+        ),
         ZSectionTitle(l.t('section_phone')),
         ZRow(
           title: l.t('haptics'),
