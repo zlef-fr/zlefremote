@@ -193,12 +193,16 @@
 <script src="/app/js/screen.js?v=3"></script>
 <script src="/app/js/app.js?v=13"></script>
 <script>
-  // This client is no longer a PWA — the phone app is native now. Register the
-  // worker one last time anyway: /sw.js is a tombstone that clears the old
-  // caches and unregisters itself, so anyone still running the installed PWA
-  // stops being served a frozen shell.
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  // This client is no longer a PWA — the phone app is native now. NEVER register
+  // /sw.js from here: it is a tombstone that unregisters itself, so registering
+  // it on every load re-installed it on every load, and its activation reload
+  // brought the page straight back here — ~30 reloads a second. Workers left by
+  // the old PWA still pick the tombstone up on their own update check; this
+  // only drops any registration still hanging around, without reloading.
+  if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => regs.forEach((r) => r.unregister()))
+      .catch(() => {});
   }
 </script>
 </body>
