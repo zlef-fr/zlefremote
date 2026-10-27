@@ -210,13 +210,15 @@ const server = http.createServer((req, res) => {
 
   // Service-worker tombstone — the phone client is no longer a PWA, but the
   // workers installed on people's phones are, and they would keep serving a
-  // frozen shell. Still served from root (whole-origin scope), still no-cache,
-  // so every returning browser picks it up and unregisters itself.
+  // frozen shell. Still served from root (whole-origin scope) so every returning
+  // browser picks it up and unregisters itself. `no-store`, not `no-cache`:
+  // Cloudflare rewrites a cacheable `no-cache` into max-age=14400, which kept a
+  // changed worker invisible at the edge for four hours.
   if (p === '/sw.js') {
     return fs.readFile(path.join(ROOT, 'public', 'app', 'sw.js'), (err, buf) => {
       if (err) return send(res, 404, 'not found');
       send(res, 200, buf, 'text/javascript; charset=utf-8',
-        { 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' });
+        { 'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' });
     });
   }
 

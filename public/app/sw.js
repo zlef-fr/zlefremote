@@ -7,7 +7,7 @@
  * serving its shell forever and those users would never see the site change.
  *
  * It claims control, deletes every cache we ever created, unregisters itself
- * and reloads the open pages once. The web client itself still works — it is
+ * and reloads, once, the pages the old worker was serving. The web client itself still works — it is
  * the no-install fallback, and the UI the agent embeds for LAN mode — it simply
  * is not a PWA any more.
  */
@@ -16,16 +16,19 @@ self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    // Only pages the OLD worker controlled get reloaded: they may be running a
+    // frozen shell. Taken BEFORE claim() — after it, every open page counts as
+    // controlled, including a fresh one served straight from the network, and
+    // reloading that one is how a stray register() turned into an endless loop.
+    const stale = await self.clients.matchAll({ type: 'window' });
     const names = await caches.keys();
     await Promise.all(
       names.filter((n) => n.startsWith('zr-')).map((n) => caches.delete(n)),
     );
     await self.clients.claim();
     await self.registration.unregister();
-    // reload, so pages stop running under a worker that is about to vanish
-    const clients = await self.clients.matchAll({ type: 'window' });
-    for (const client of clients) {
-      try { client.navigate(client.url); } catch {}
+    for (const client of stale) {
+      client.navigate(client.url).catch(() => {});
     }
   })());
 });
