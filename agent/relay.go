@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -19,15 +20,19 @@ import (
 // new QR. The pairing URL then carries &p=1, telling the phone this device is
 // reconnectable and can be saved.
 func runRelay(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, key []byte, keyB64, relayHost string, persistent bool) error {
-	desiredRoom := ""
+	rooms := &roomKeeper{}
 	if persistent {
-		desiredRoom = deriveRoom(key)
+		rooms.derived = deriveRoom(key)
 	}
 	for {
-		err := relayOnce(sealer, inj, scr, br, clip, keyB64, relayHost, desiredRoom, persistent)
+		err := relayOnce(sealer, inj, scr, br, clip, keyB64, relayHost, rooms)
 		if errors.Is(err, errRoomTaken) {
-			// stable room unavailable (collision) — degrade to a random room.
-			desiredRoom, persistent = "", false
+			if rooms.taken(time.Now()) {
+				// our own previous socket still holds the room on the relay; it
+				// is reaped within a minute, so ask again shortly.
+				time.Sleep(5 * time.Second)
+				continue
+			}
 			if !machineMode {
 				fmt.Printf("\n  saved-device address was busy — using a one-time room this session.\n")
 			}
@@ -41,9 +46,74 @@ func runRelay(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Cl
 	}
 }
 
+// roomKeeper decides which room the agent asks the relay for on every connect.
+//
+// The room is the phone's only way back to this computer: a reconnect that
+// lands in a new room strands every phone holding the old link, while the
+// agent (and the panel showing it) look perfectly healthy. So once the relay
+// has granted a room, every later connection asks for that same room — the
+// key is unchanged, so the pairing link stays valid across relay restarts,
+// network changes and suspend/resume.
+type roomKeeper struct {
+	derived string    // room derived from the remembered identity, "" if none
+	held    string    // room the relay last granted this run
+	takenAt time.Time // first room_taken while asking for held, zero otherwise
+}
+
+// reclaimWindow bounds how long we keep asking for a room the relay says is
+// taken. Right after a reconnect the relay may still hold our previous, dead
+// socket; its keepalive terminates that within 60 s, then the room is ours again.
+const reclaimWindow = 2 * time.Minute
+
+// want is the room to request ("" = let the relay pick one).
+func (k *roomKeeper) want() string {
+	if k.held != "" {
+		return k.held
+	}
+	return k.derived
+}
+
+// persistentRoom reports whether room is the remembered identity's room — the
+// only case where the pairing link may tell the phone it can save the device.
+func (k *roomKeeper) persistentRoom(room string) bool {
+	return k.derived != "" && room == k.derived
+}
+
+func (k *roomKeeper) granted(room string) {
+	k.held = room
+	k.takenAt = time.Time{}
+}
+
+// taken handles a room_taken answer and reports whether to ask for the same
+// room again. A room we never held belongs to another live device (a derived
+// room hash collision): give it up at once. A room we held is our own stale
+// socket: retry until reclaimWindow runs out, then start over in a new room.
+func (k *roomKeeper) taken(now time.Time) bool {
+	if k.held != "" {
+		if k.takenAt.IsZero() {
+			k.takenAt = now
+		}
+		if now.Sub(k.takenAt) < reclaimWindow {
+			return true
+		}
+	}
+	k.derived, k.held, k.takenAt = "", "", time.Time{}
+	return false
+}
+
+// Relay liveness. The relay answers {t:"ping"} with {t:"pong"}; when nothing at
+// all has come back for relayDeadAfter the socket is dead even if TCP has not
+// noticed (suspend/resume, a dropped Wi-Fi, a close frame lost at the edge), and
+// the agent reconnects instead of waiting on a room that no longer exists.
+const (
+	relayPingEvery = 20 * time.Second
+	relayDeadAfter = 50 * time.Second
+	relayWriteWait = 10 * time.Second
+)
+
 var errRoomTaken = errors.New("room_taken")
 
-func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, keyB64, relayHost, desiredRoom string, persistent bool) error {
+func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, keyB64, relayHost string, rooms *roomKeeper) error {
 	ctx := context.Background()
 	wsURL := "wss://" + relayHost + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
@@ -56,20 +126,47 @@ func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip C
 	// One relay socket is shared by every phone's session plus the read loop, and
 	// screen-view frames are pushed from per-session goroutines — serialize all
 	// writes so concurrent Write calls never interleave.
+	// A write that cannot complete within relayWriteWait means a dead socket:
+	// the library then closes the connection and the read loop reconnects.
 	var wmu sync.Mutex
-	writeData := func(to int, payload string) {
-		out, _ := json.Marshal(frame{T: "data", To: to, Payload: payload})
+	write := func(f frame) error {
+		out, _ := json.Marshal(f)
 		wmu.Lock()
-		c.Write(ctx, websocket.MessageText, out)
-		wmu.Unlock()
+		defer wmu.Unlock()
+		wctx, cancel := context.WithTimeout(ctx, relayWriteWait)
+		defer cancel()
+		return c.Write(wctx, websocket.MessageText, out)
+	}
+	writeData := func(to int, payload string) {
+		write(frame{T: "data", To: to, Payload: payload})
 	}
 
-	// register as a host. When we have a persistent identity, ask the relay for
-	// our derived room so saved phones find us at the same address every time.
-	hb, _ := json.Marshal(frame{T: "host", Room: desiredRoom})
-	if err := c.Write(ctx, websocket.MessageText, hb); err != nil {
+	// register as a host, asking for the room we already hold this run (or the
+	// remembered identity's room), so phones find us at the same address.
+	if err := write(frame{T: "host", Room: rooms.want()}); err != nil {
 		return err
 	}
+
+	var lastRx atomic.Int64
+	lastRx.Store(time.Now().UnixNano())
+	hbCtx, stopHeartbeat := context.WithCancel(ctx)
+	defer stopHeartbeat()
+	go func() {
+		t := time.NewTicker(relayPingEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, lastRx.Load())) > relayDeadAfter {
+					c.CloseNow() // unblocks Read below → reconnect
+					return
+				}
+				write(frame{T: "ping"})
+			}
+		}
+	}()
 
 	sessions := map[int]*Session{}
 	roster := NewRoster()
@@ -84,6 +181,7 @@ func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip C
 		if err != nil {
 			return err
 		}
+		lastRx.Store(time.Now().UnixNano())
 		var f frame
 		if json.Unmarshal(data, &f) != nil {
 			continue
@@ -94,8 +192,9 @@ func relayOnce(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip C
 			// it. If the relay couldn't grant our derived room (collision), we
 			// took a random one — drop the flag so the phone won't try to
 			// silently re-derive an address that won't match.
+			rooms.granted(f.Room)
 			frag := "#k=" + keyB64
-			if persistent && f.Room == desiredRoom {
+			if rooms.persistentRoom(f.Room) {
 				frag += "&p=1"
 			}
 			url := fmt.Sprintf("https://%s/r/%s%s", relayHost, f.Room, frag)

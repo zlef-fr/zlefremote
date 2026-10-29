@@ -16,6 +16,8 @@ typedef struct {
   GtkWidget *popup;    /* the control window */
   ZrApp     *app;
   guint      reposition_src;  /* pending deferred reposition, 0 if none */
+  gint       want_x, want_y;  /* where the popup belongs while it is shown */
+  gint       corrections;     /* window-manager overrides undone this showing */
 } PluginCtx;
 
 static gboolean reposition_idle(gpointer data);
@@ -86,12 +88,59 @@ static void popup_hide(PluginCtx *ctx) {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ctx->button), FALSE);
 }
 
-/* (Re)place the popup against the panel button. The panel keeps it within the
- * monitor and flips it to the other side of the panel when it would overflow. */
+/* Where the popup belongs: against the panel button, on the side away from the
+ * screen edge, kept inside the button's monitor.
+ *
+ * Computed from the button's LIVE root coordinates (an X round trip) and the
+ * monitor under it, never from cached window state. xfce_panel_plugin_
+ * position_widget() trusts gtk_window_get_position() on the plugin's toplevel
+ * — in the external wrapper a GtkPlug, whose frame-extents lookup falls back to
+ * stale cached coordinates — and after hours of suspend/resume and display
+ * changes it put the popup far from the panel, out of reach until the panel
+ * was restarted. It stays only as the fallback when the button is unmapped. */
+static gboolean popup_compute(PluginCtx *ctx, gint *x, gint *y) {
+  GtkWidget *top = gtk_widget_get_toplevel(ctx->button);
+  GdkWindow *topwin = top ? gtk_widget_get_window(top) : NULL;
+  gint tx = 0, ty = 0, rx = 0, ry = 0;
+  if (!topwin || !gtk_widget_get_mapped(ctx->button) ||
+      !gtk_widget_translate_coordinates(ctx->button, top, 0, 0, &tx, &ty)) {
+    xfce_panel_plugin_position_widget(ctx->plugin, ctx->popup, ctx->button, x, y);
+    return TRUE;
+  }
+  gdk_window_get_origin(topwin, &rx, &ry);
+
+  GtkAllocation b;
+  gtk_widget_get_allocation(ctx->button, &b);
+  gint bx = rx + tx, by = ry + ty;
+
+  GtkRequisition req;
+  gtk_widget_get_preferred_size(ctx->popup, NULL, &req);
+
+  GdkMonitor *mon = gdk_display_get_monitor_at_point(
+      gtk_widget_get_display(ctx->button), bx + b.width / 2, by + b.height / 2);
+  if (!mon) return FALSE;
+  GdkRectangle g;
+  gdk_monitor_get_geometry(mon, &g);
+
+  switch (xfce_panel_plugin_arrow_type(ctx->plugin)) {
+    case GTK_ARROW_UP:    *x = bx;             *y = by - req.height; break;
+    case GTK_ARROW_DOWN:  *x = bx;             *y = by + b.height;   break;
+    case GTK_ARROW_LEFT:  *x = bx - req.width; *y = by;              break;
+    default:              *x = bx + b.width;   *y = by;              break;
+  }
+  *x = CLAMP(*x, g.x, MAX(g.x, g.x + g.width  - req.width));
+  *y = CLAMP(*y, g.y, MAX(g.y, g.y + g.height - req.height));
+  return TRUE;
+}
+
+/* (Re)place the popup against the panel button. Called before the popup maps
+ * (so the window manager is handed a position and never applies its own dialog
+ * placement) and again whenever its size or the window manager moves it. */
 static void popup_position(PluginCtx *ctx) {
   gint x = 0, y = 0;
-  if (!gtk_widget_get_visible(ctx->popup)) return;
-  xfce_panel_plugin_position_widget(ctx->plugin, ctx->popup, ctx->button, &x, &y);
+  if (!popup_compute(ctx, &x, &y)) return;
+  ctx->want_x = x;
+  ctx->want_y = y;
   gtk_window_move(GTK_WINDOW(ctx->popup), x, y);
 }
 
@@ -107,10 +156,33 @@ static gboolean reposition_idle(gpointer data) {
 }
 
 static void popup_show(PluginCtx *ctx) {
+  ctx->corrections = 0;
+  popup_position(ctx);            /* unmapped: becomes the map-time position */
   gtk_widget_show(ctx->popup);
   xfce_panel_plugin_block_autohide(ctx->plugin, TRUE);
   popup_position(ctx);
   gtk_window_present(GTK_WINDOW(ctx->popup));
+}
+
+/* The window manager has the last word on where a mapped window goes, and a
+ * dialog it decides to place itself lands wherever its placement policy says —
+ * typically the middle of the screen. Whenever the popup is seen anywhere but
+ * where it belongs, put it back (bounded, so we never fight a WM that refuses). */
+static gboolean on_popup_configure(GtkWidget *w, GdkEventConfigure *e, PluginCtx *ctx) {
+  (void) w;
+  if (!gtk_widget_get_visible(ctx->popup) || ctx->reposition_src) return FALSE;
+  if (ABS(e->x - ctx->want_x) <= 2 && ABS(e->y - ctx->want_y) <= 2) return FALSE;
+  if (ctx->corrections >= 5) return FALSE;
+  ctx->corrections++;
+  ctx->reposition_src = g_timeout_add(10, reposition_idle, ctx);
+  return FALSE;
+}
+
+static gboolean on_popup_map(GtkWidget *w, GdkEvent *e, PluginCtx *ctx) {
+  (void) w; (void) e;
+  if (ctx->reposition_src == 0)
+    ctx->reposition_src = g_timeout_add(10, reposition_idle, ctx);
+  return FALSE;
 }
 
 static void on_button_toggled(GtkWidget *b, PluginCtx *ctx) {
@@ -177,6 +249,10 @@ static void zlefremote_construct(XfcePanelPlugin *plugin) {
                    G_CALLBACK(on_popup_focus_out), ctx);
   g_signal_connect(ctx->popup, "key-press-event",
                    G_CALLBACK(on_popup_key), ctx);
+  g_signal_connect(ctx->popup, "configure-event",
+                   G_CALLBACK(on_popup_configure), ctx);
+  g_signal_connect(ctx->popup, "map-event",
+                   G_CALLBACK(on_popup_map), ctx);
   /* never let destroy of the popup take down the agent before free-data */
   g_signal_connect(ctx->popup, "delete-event",
                    G_CALLBACK(gtk_widget_hide_on_delete), NULL);
