@@ -17,6 +17,7 @@
     btnQuality: $('btnQuality'), lblQuality: $('lblQuality'), btnMonitor: $('btnMonitor'),
     btnClip: $('btnClip'), btnCad: $('btnCad'), btnFull: $('btnFull'),
     btnHelp: $('btnHelp'), btnQuit: $('btnQuit'),
+    blackout: $('blackout'),
   };
 
   let caps = {}, hostName = '', state = 'connecting';
@@ -92,7 +93,7 @@
     el.btnMonitor.hidden = (c.screens || []).length < 2;
     paintMonitor();
 
-    if (caps.screen) { ZRDeskView.start(); showIdle(t('waiting'), '', false); }
+    if (caps.screen) { if (!ZRDeskInput.blackedOut()) ZRDeskView.start(); showIdle(t('waiting'), '', false); }
     else showIdle(t('noscreen'), '', true);
 
     el.btnClip.hidden = !caps.clip;
@@ -164,9 +165,23 @@
         toast(t('taken'));
         break;
       case 'ungrab':
-        el.body.classList.remove('driving');
+        el.body.classList.remove('driving', 'peek');
         paintTakeover();
-        toast(t('released'));
+        if (!ZRDeskInput.blackedOut()) toast(t('released'));
+        break;
+      // the picture keeps nothing on screen and the stream pauses: the other
+      // computer stops capturing until you come back
+      case 'blackout':
+        el.help.hidden = true;
+        el.toasts.replaceChildren();
+        el.blackout.hidden = false;
+        requestAnimationFrame(() => el.body.classList.add('blacked-out'));
+        ZRDeskView.stop();
+        break;
+      case 'unblackout':
+        el.body.classList.remove('blacked-out');
+        setTimeout(() => { if (!ZRDeskInput.blackedOut()) el.blackout.hidden = true; }, 260);
+        if (caps.screen && state === 'paired') ZRDeskView.start();
         break;
       case 'fullscreen': toggleFullscreen(); break;
       case 'quality':
@@ -196,7 +211,7 @@
   // clicking the picture is what takes control — remember where, so the remote
   // pointer lands under the local one once the lock is granted
   el.stage.addEventListener('mousedown', (e) => {
-    if (ZRDeskInput.driving() || state !== 'paired') return;
+    if (ZRDeskInput.driving() || ZRDeskInput.blackedOut() || state !== 'paired') return;
     pendingClick = { x: e.clientX, y: e.clientY };
     ZRDeskInput.take();
   });
@@ -277,6 +292,8 @@
   function buildHelp() {
     const rows = [
       ['Right Ctrl', t('help_grab')],
+      ['Ctrl + Esc', t('help_escape')],
+      ['Right Ctrl × 2', t('help_blackout')],
       ['Right Ctrl + F', t('help_full')],
       ['Right Ctrl + P', t('help_quality')],
       ['Right Ctrl + M', t('help_monitor')],
@@ -295,7 +312,8 @@
       li.append(a, b);
       return li;
     }));
-    el.helpCapture.textContent = ZRDeskInput.keyboardLocked() ? t('help_capture_full') : t('help_capture_part');
+    el.helpCapture.textContent = ZRDeskInput.keyboardLocked() ? t('help_capture_full')
+      : ZRDeskInput.canLockKeys() ? t('help_capture_auto') : t('help_capture_part');
   }
 
   // ── toasts ────────────────────────────────────────────────────────────────
