@@ -14,7 +14,7 @@ const ZRDeskI18n = (() => {
     noscreen: 'This computer cannot share its screen (agent built without capture). Keyboard and mouse still work.',
 
     take: 'Take control',
-    take_hint: 'Click, or tap Right Ctrl. Right Ctrl again gives control back.',
+    take_hint: 'Click, or tap Right Ctrl. Ctrl+Esc or Right Ctrl gives control back.',
     taken: 'controlling',
     released: 'control released',
     quality: 'Quality',
@@ -36,6 +36,9 @@ const ZRDeskI18n = (() => {
     help_super: 'send the Windows/Super key',
     help_esc: 'send Escape',
     help_quit: 'disconnect',
+    help_escape: 'give control back and leave fullscreen',
+    help_blackout: 'black screen, until the next double tap',
+    help_capture_auto: 'Taking control goes fullscreen so every key reaches the other computer: Escape, the Windows key, Alt+Tab, Ctrl+W. Ctrl+Esc brings you back.',
     help_capture_full: 'Full key capture is on: this tab receives every shortcut, including Ctrl+W and Alt+Tab.',
     help_capture_part: 'Your browser keeps some shortcuts for itself (Ctrl+W, Ctrl+T, Alt+Tab, Escape…). Go fullscreen in Chrome or Edge to capture them too — or use the chords above to send them.',
 
@@ -61,7 +64,7 @@ const ZRDeskI18n = (() => {
     noscreen: 'Cet ordinateur ne peut pas partager son écran (agent compilé sans capture). Le clavier et la souris fonctionnent quand même.',
 
     take: 'Prendre la main',
-    take_hint: 'Cliquez, ou appuyez sur Ctrl droite. Ctrl droite à nouveau rend la main.',
+    take_hint: 'Cliquez, ou appuyez sur Ctrl droite. Ctrl+Échap ou Ctrl droite rend la main.',
     taken: 'aux commandes',
     released: 'main rendue',
     quality: 'Qualité',
@@ -83,6 +86,9 @@ const ZRDeskI18n = (() => {
     help_super: 'envoyer la touche Windows/Super',
     help_esc: 'envoyer Échap',
     help_quit: 'se déconnecter',
+    help_escape: 'rendre la main et quitter le plein écran',
+    help_blackout: 'écran noir, jusqu’au prochain double appui',
+    help_capture_auto: 'Prendre la main passe en plein écran pour que chaque touche atteigne l’autre ordinateur : Échap, la touche Windows, Alt+Tab, Ctrl+W. Ctrl+Échap vous ramène.',
     help_capture_full: 'Capture clavier totale : cet onglet reçoit tous les raccourcis, y compris Ctrl+W et Alt+Tab.',
     help_capture_part: 'Votre navigateur garde certains raccourcis (Ctrl+W, Ctrl+T, Alt+Tab, Échap…). Passez en plein écran sur Chrome ou Edge pour les capturer aussi — ou utilisez les combinaisons ci-dessus pour les envoyer.',
 

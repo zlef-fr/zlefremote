@@ -13,45 +13,30 @@
 // text is being injected would corrupt what you typed.
 //
 // Right Ctrl is the local menu key (never forwarded): tap = take/give back
-// control, and its chords drive this page — including the chords no browser
-// would ever let us capture (Ctrl+Alt+Del, Alt+Tab, Super).
+// control, double tap = black the screen out until the next double tap, and
+// its chords drive this page. Ctrl+Esc always gives control back.
+//
+// Taking control in Chromium also goes fullscreen, because that is the only
+// state in which the Keyboard Lock API works — and without it the browser and
+// the OS keep Escape, the Windows key, Alt+Tab and Ctrl+W for themselves.
 const ZRDeskInput = (() => {
   let stage = null, send = () => {}, view = null, onAction = () => {};
   let driving = false, keyHold = false, raw = false;
   let nx = .5, ny = .5, pendingMove = false, rafId = 0;
   let scrollAcc = 0, scrollAccX = 0;
   let textBuf = '';
-  const heldKeys = new Set();
+  const heldKeys = new Map();      // e.code → name pressed on the host
   const heldButtons = new Set();
   const sentMods = new Set();
-  let menuHeld = false, menuUsed = false;
+  let menuHeld = false, menuUsed = false, lastTap = 0, leaveTimer = 0, drivingBeforeTap = false;
   let keyboardLocked = false;
+  let autoFull = false;            // fullscreen we entered ourselves, on take()
+  let blackout = false, wasDriving = false, wantFull = false;
+  let soloMod = null;              // a modifier pressed with nothing else (yet)
 
   const BUTTONS = { 0: 'left', 1: 'middle', 2: 'right' };
-
-  // browser key → the names the agent's injector knows (robotgo keyNames)
-  const KEYS = {
-    Enter: 'enter', NumpadEnter: 'enter', Escape: 'escape', Tab: 'tab',
-    Backspace: 'backspace', Delete: 'delete', Insert: 'insert',
-    Home: 'home', End: 'end', PageUp: 'pageup', PageDown: 'pagedown',
-    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-    CapsLock: 'capslock', PrintScreen: 'printscreen', ContextMenu: 'menu',
-    NumLock: 'num_lock',
-  };
-  const CODES = {
-    Numpad0: 'num0', Numpad1: 'num1', Numpad2: 'num2', Numpad3: 'num3',
-    Numpad4: 'num4', Numpad5: 'num5', Numpad6: 'num6', Numpad7: 'num7',
-    Numpad8: 'num8', Numpad9: 'num9', NumpadAdd: 'num_plus',
-    NumpadSubtract: 'num_minus', NumpadMultiply: 'num_asterisk',
-    NumpadDivide: 'num_slash',
-  };
-
-  function keyNameOf(e) {
-    if (KEYS[e.key]) return KEYS[e.key];
-    if (CODES[e.code]) return CODES[e.code];
-    if (/^F([1-9]|1[0-2])$/.test(e.key)) return e.key.toLowerCase();
-    return null;
-  }
+  const DOUBLE_TAP_MS = 320;
+  const canLockKeys = !!(navigator.keyboard && navigator.keyboard.lock);
 
   function config(opts) {
     stage = opts.stage;
@@ -74,23 +59,81 @@ const ZRDeskInput = (() => {
 
   // ── taking / giving back control ──────────────────────────────────────────
   function take() {
-    if (!stage) return;
+    if (!stage || blackout) return;
+    wantFull = canLockKeys && !document.fullscreenElement;
     // unadjustedMovement asks for raw device deltas (no OS pointer acceleration)
     // so a flick here matches a flick over there; older browsers ignore it.
     const req = stage.requestPointerLock({ unadjustedMovement: true });
     if (req && typeof req.catch === 'function') req.catch(() => stage.requestPointerLock());
   }
+  // Fullscreen only once the pointer is locked: requestFullscreen consumes the
+  // user activation, and Chrome checks pointer lock's gesture asynchronously —
+  // asking for both in the same handler, in either order, loses the lock.
+  function enterAutoFull() {
+    if (!wantFull) return;
+    wantFull = false;
+    if (document.fullscreenElement) return;
+    autoFull = true;
+    document.documentElement.requestFullscreen().catch(() => { autoFull = false; });
+  }
   function release() { if (document.pointerLockElement) document.exitPointerLock(); else setDriving(false); }
   function toggle() { driving ? release() : take(); }
 
-  function onLockChange() { setDriving(document.pointerLockElement === stage); }
+  // the one way out that always works: control back, fullscreen off
+  function escape() {
+    if (blackout) return;
+    release();
+    autoFull = false;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+
+  function leaveAutoFull() {
+    if (!autoFull) return;
+    autoFull = false;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+
+  function onLockChange() {
+    const on = document.pointerLockElement === stage;
+    setDriving(on);
+    if (on) enterAutoFull();
+  }
 
   function setDriving(on) {
     if (driving === on) return;
     driving = on;
-    if (!on) releaseAll();
+    if (!on) {
+      releaseAll();
+      // Esc (unlocked browsers), Right Ctrl, focus loss… all land here. Wait
+      // out the double-tap window first: if this release was the first half of
+      // a blackout, leaving fullscreen only to re-enter it would flash.
+      clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => { if (!blackout && !driving) leaveAutoFull(); }, DOUBLE_TAP_MS);
+    }
     view && view.setCursor(nx, ny, on);
     onAction(on ? 'grab' : 'ungrab');
+  }
+
+  // Right Ctrl, twice: the screen goes black (this page, not the other
+  // computer) and stays black until the next double tap. Control is handed
+  // back meanwhile so nothing typed blind lands over there, and taken again on
+  // the way out if you had it.
+  function toggleBlackout(drivingBefore) {
+    if (!blackout) {
+      wasDriving = drivingBefore;
+      blackout = true;
+      release();
+      // a black window is not a black screen
+      if (canLockKeys && !document.fullscreenElement) {
+        autoFull = true;
+        document.documentElement.requestFullscreen().catch(() => { autoFull = false; });
+      }
+      onAction('blackout');
+    } else {
+      blackout = false;
+      onAction('unblackout');
+      if (wasDriving) take(); else leaveAutoFull();
+    }
   }
 
   // Never leave a key or button held on the other machine.
@@ -100,6 +143,7 @@ const ZRDeskInput = (() => {
     heldKeys.forEach((k) => { if (keyHold) send({ t: 'kup', k }); });
     heldKeys.clear();
     releaseMods();
+    soloMod = null;
   }
 
   // ── pointer ───────────────────────────────────────────────────────────────
@@ -131,6 +175,7 @@ const ZRDeskInput = (() => {
     e.preventDefault();
     const b = BUTTONS[e.button];
     if (!b) return;
+    soloMod = false;  // Alt+drag, Meta+click: the modifier was not alone
     syncMods(e);
     send({ t: 'mvabs', nx: round6(nx), ny: round6(ny) });   // pin before pressing
     send({ t: 'down', b });
@@ -167,15 +212,22 @@ const ZRDeskInput = (() => {
       if (!menuHeld) { menuHeld = true; menuUsed = false; releaseAll(); }
       return;
     }
+    if (blackout) { e.preventDefault(); return; }
     if (menuHeld) { e.preventDefault(); chord(e); return; }
+    // Ctrl+Esc: give control back, from anywhere
+    if (e.key === 'Escape' && e.ctrlKey) { e.preventDefault(); escape(); return; }
     if (!driving) return;
     e.preventDefault();
 
-    if (e.repeat && !raw && isPrintable(e)) { queueText(e.key); return; }
+    if (e.repeat && !raw && ZRKeys.isPrintable(e)) { queueText(e.key); return; }
     if (e.key === 'Dead' || e.key === 'Unidentified') return;   // composing
-    if (isModifier(e.key)) return;                              // pressed lazily
+    if (ZRKeys.isModifier(e.key)) {                             // pressed lazily
+      if (!e.repeat) soloMod = ZRKeys.modCount(e) === 1 && heldKeys.size === 0 ? e.code : false;
+      return;
+    }
+    soloMod = false;
 
-    if (!raw && isPrintable(e)) {
+    if (!raw && ZRKeys.isPrintable(e)) {
       // the character the browser composed IS what the user typed — send it as
       // text so the host injects it in ITS layout
       releaseMods();
@@ -183,56 +235,58 @@ const ZRDeskInput = (() => {
       return;
     }
 
-    const name = raw ? rawName(e) : keyNameOf(e);
+    // Ctrl+C, Ctrl+Shift+T, Win+E… need a name that survives the modifiers
+    const chorded = e.ctrlKey || e.altKey || e.metaKey;
+    const name = raw ? ZRKeys.physical(e) : chorded ? ZRKeys.chord(e) : ZRKeys.named(e);
     if (!name) return;
+    flushText();
     syncMods(e);
-    if (keyHold) { send({ t: 'kdown', k: name }); heldKeys.add(name); }
-    else send({ t: 'key', k: name, mods: modList(e) });   // agent < 1.7.0
+    if (keyHold) {
+      // auto-repeat re-sends the press: the host repeats like a local keyboard
+      send({ t: 'kdown', k: name });
+      heldKeys.set(e.code, name);
+    } else {
+      send({ t: 'key', k: name, mods: ZRKeys.mods(e) });   // agent < 1.7.0
+    }
   }
 
   function onKeyUp(e) {
     if (e.code === 'ControlRight') {
       e.preventDefault();
       menuHeld = false;
-      if (!menuUsed) toggle();     // a bare tap flips control
+      if (menuUsed) return;
+      // a bare tap flips control at once (pointer lock must be requested from
+      // inside the key event, a timer is refused); a second tap inside the
+      // window turns the pair into a blackout and undoes the first one
+      const now = performance.now();
+      if (lastTap && now - lastTap < DOUBLE_TAP_MS) {
+        lastTap = 0;
+        toggleBlackout(drivingBeforeTap);
+        return;
+      }
+      lastTap = now;
+      drivingBeforeTap = driving;
+      if (!blackout) toggle();
       return;
     }
+    if (blackout) { e.preventDefault(); return; }
     if (!driving) return;
     e.preventDefault();
-    if (isModifier(e.key)) { releaseModIfUp(e); return; }
-    const name = raw ? rawName(e) : keyNameOf(e);
-    if (!name || !heldKeys.has(name)) return;
-    heldKeys.delete(name);
+    if (ZRKeys.isModifier(e.key)) {
+      // the Windows key (or left Alt) pressed and released alone is a key of
+      // its own: Start menu / launcher / menu bar over there
+      if (soloMod === e.code && (e.code === 'MetaLeft' || e.code === 'MetaRight' || e.code === 'AltLeft')) {
+        send({ t: 'key', k: e.code === 'AltLeft' ? 'alt' : 'meta', mods: [] });
+      }
+      soloMod = null;
+      releaseModIfUp(e);
+      return;
+    }
+    const name = heldKeys.get(e.code);
+    if (!name) return;
+    heldKeys.delete(e.code);
     if (keyHold) send({ t: 'kup', k: name });
   }
-
-  // raw mode: forward the physical key, letting the other computer's layout
-  // decide the character. Right for games, wrong for typing across layouts.
-  function rawName(e) {
-    const c = e.code;
-    if (/^Key[A-Z]$/.test(c)) return c.slice(3).toLowerCase();
-    if (/^Digit[0-9]$/.test(c)) return c.slice(5);
-    if (CODES[c]) return CODES[c];
-    const punct = {
-      Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\',
-      Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Backquote: '`',
-      Space: 'space', IntlBackslash: '\\',
-    };
-    if (punct[c]) return punct[c];
-    if (KEYS[e.key]) return KEYS[e.key];
-    if (/^F([1-9]|1[0-2])$/.test(e.key)) return e.key.toLowerCase();
-    const mods = { ShiftLeft: 'shift', ShiftRight: 'shift', ControlLeft: 'ctrl', AltLeft: 'alt', AltRight: 'alt', MetaLeft: 'cmd', MetaRight: 'cmd' };
-    return mods[c] || null;
-  }
-
-  function isPrintable(e) {
-    if (!e.key || e.key.length !== 1) return false;
-    if (e.metaKey) return false;
-    // AltGr reports as Ctrl+Alt on Windows, yet it composes a real character
-    if (e.getModifierState && e.getModifierState('AltGraph')) return true;
-    return !e.ctrlKey && !e.altKey;
-  }
-  function isModifier(k) { return k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'AltGraph'; }
 
   // text is batched per frame: typing fast shouldn't mean one frame per letter
   function queueText(ch) {
@@ -243,15 +297,6 @@ const ZRDeskInput = (() => {
     if (!textBuf) return;
     send({ t: 'text', s: textBuf });
     textBuf = '';
-  }
-
-  function modList(e) {
-    const m = [];
-    if (e.shiftKey) m.push('shift');
-    if (e.ctrlKey) m.push('ctrl');
-    if (e.altKey) m.push('alt');
-    if (e.metaKey) m.push('meta');
-    return m;
   }
 
   // press on the host exactly the modifiers held here, right before an event
@@ -268,7 +313,7 @@ const ZRDeskInput = (() => {
   }
 
   function releaseModIfUp(e) {
-    const name = { Shift: 'shift', Control: 'ctrl', Alt: 'alt', Meta: 'cmd' }[e.key];
+    const name = { Shift: 'shift', Control: 'ctrl', Alt: 'alt', Meta: 'cmd', OS: 'cmd' }[e.key];
     if (!name || !sentMods.has(name)) return;
     send({ t: 'kup', k: name });
     sentMods.delete(name);
@@ -282,6 +327,7 @@ const ZRDeskInput = (() => {
   // ── Right Ctrl chords ─────────────────────────────────────────────────────
   function chord(e) {
     menuUsed = true;
+    lastTap = 0;   // a chord is not a tap
     switch (e.code) {
       case 'KeyF': onAction('fullscreen'); break;
       case 'KeyP': onAction('quality'); break;
@@ -305,6 +351,7 @@ const ZRDeskInput = (() => {
   // ones that matter.
   async function onFullscreenChange() {
     const fs = !!document.fullscreenElement;
+    if (!fs) autoFull = false;
     try {
       if (fs && navigator.keyboard && navigator.keyboard.lock) {
         await navigator.keyboard.lock();
@@ -327,6 +374,8 @@ const ZRDeskInput = (() => {
     setRaw: (v) => { releaseAll(); raw = !!v; },
     raw: () => raw,
     keyboardLocked: () => keyboardLocked,
+    canLockKeys: () => canLockKeys,
+    blackedOut: () => blackout,
     // place the pointer where the user clicked before control was taken
     warpFromClient(clientX, clientY) {
       const r = view.rect();

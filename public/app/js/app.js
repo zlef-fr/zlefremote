@@ -368,16 +368,47 @@
       typer.value = ''; // keep the field from drifting out of sync
     }
   });
-  // hardware keyboards (desktop test): send arrows etc.
-  typer.addEventListener('keydown', (e) => {
-    const map = { Enter: 'enter', Backspace: 'backspace', Tab: 'tab', Escape: 'escape',
-      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Delete: 'delete' };
-    if (map[e.key]) {
-      e.preventDefault(); pressKey(map[e.key]);
-      if (e.key === 'Enter') { echoChar('↵', 'ctl'); echoFlush(); }
-      else if (e.key === 'Backspace') echoChar('⌫', 'del');
+  // ── a computer's keyboard (this page opened on a laptop) ────────────────────
+  // A physical keyboard drives the other computer from anywhere on the page,
+  // not only from the typer: chords (Ctrl+C, Ctrl+Shift+T, Win+E), Escape,
+  // Tab, F-keys, and the Windows key pressed alone. Printable keys typed into
+  // the typer stay with it (its input event composes and echoes them).
+  // Touch keyboards report 'Unidentified' here and keep using beforeinput.
+  let hwSolo = null;   // the modifier pressed with nothing else, if any
+  function hwEditable(t) {
+    return t !== typer && !!(t && t.closest && t.closest('input, textarea, select, [contenteditable]'));
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!document.body.classList.contains('mode-control') || e.isComposing || hwEditable(e.target)) return;
+    if (ZRKeys.isModifier(e.key)) {
+      if (!e.repeat) hwSolo = ZRKeys.modCount(e) === 1 ? e.code : false;
+      return;
     }
-  });
+    hwSolo = false;
+    if (e.key === 'Dead' || e.key === 'Unidentified') return;
+    const inTyper = e.target === typer;
+    if (ZRKeys.isPrintable(e)) {
+      if (inTyper) return;
+      e.preventDefault();
+      send({ t: 'text', s: e.key }); echoChar(e.key);
+      return;
+    }
+    const chorded = e.ctrlKey || e.altKey || e.metaKey;
+    const k = chorded ? ZRKeys.chord(e) : ZRKeys.named(e);
+    if (!k) return;
+    e.preventDefault();
+    send({ t: 'key', k, mods: ZRKeys.mods(e) });
+    if (k === 'enter') { echoChar('↵', 'ctl'); echoFlush(); }
+    else if (k === 'backspace') echoChar('⌫', 'del');
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (!document.body.classList.contains('mode-control')) return;
+    if (hwSolo === e.code && (e.code === 'MetaLeft' || e.code === 'MetaRight')) {
+      e.preventDefault();
+      send({ t: 'key', k: 'meta', mods: [] });
+    }
+    if (ZRKeys.isModifier(e.key)) hwSolo = null;
+  }, true);
 
   // ── media (remote layout: volume row · transport row w/ big play) ──────────
   const MEDIA = [
