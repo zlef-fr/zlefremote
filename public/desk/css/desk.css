@@ -149,8 +149,8 @@ body.driving #screen { cursor: none; }
 body.blacked-out .blackout { opacity: 1; }
 .blackout svg {
   width: min(22vw, 260px); height: auto;
-  opacity: .07;
+  opacity: .2;
   animation: blackoutBreathe 9s ease-in-out infinite;
 }
-@keyframes blackoutBreathe { 0%, 100% { opacity: .05; } 50% { opacity: .09; } }
+@keyframes blackoutBreathe { 0%, 100% { opacity: .17; } 50% { opacity: .24; } }
 @media (prefers-reduced-motion: reduce) { .blackout svg { animation: none; } }
