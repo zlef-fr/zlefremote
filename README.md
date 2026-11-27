@@ -4,19 +4,27 @@
 
 **Your phone is the trackpad.** Control your computer's mouse and keyboard from
 any phone — over your local Wi-Fi, or end-to-end encrypted from anywhere through
-[remote.zlef.fr](https://remote.zlef.fr). No app store, no account.
+[remote.zlef.fr](https://remote.zlef.fr). No account.
 
 ```
-phone browser ──(AES-256-GCM)──▶ relay (sees only ciphertext) ──▶ agent ──▶ your OS
-                       or, on LAN: phone browser ──────────────▶ agent ──▶ your OS
+phone app ──(AES-256-GCM)──▶ relay (sees only ciphertext) ──▶ agent ──▶ your OS
+                or, on LAN: phone app ──────────────────────▶ agent ──▶ your OS
 ```
 
-Three pieces:
+Four pieces:
 
 - **The agent** — a single portable binary you run on the computer you want to
   control (Linux / Windows / macOS). It injects mouse & keyboard events.
-- **The remote** — a web page that runs in any phone browser. Nothing to install
-  on the phone; you open it by scanning the agent's QR code.
+- **The Android app** — `app/`, bundle `fr.zlef.remote`, downloaded from
+  [remote.zlef.fr](https://remote.zlef.fr/app/zlefremote.apk). Scan the agent's
+  QR and the phone is a trackpad, keyboard, media remote and touchscreen. See
+  [`app/README.md`](app/README.md). **There is no iOS build** — compiling and
+  signing one needs macOS and a paid Apple developer account, and this project
+  has neither; iPhones use the web remote below.
+- **The web remote** — the same UI as a web page, for phones without the app
+  (and what the agent embeds for LAN mode). It used to be an installable PWA;
+  it is a plain web client now, and `/sw.js` is a tombstone that retires the
+  workers already installed on people's phones.
 - **The desktop remote** — for driving one computer from another. Open the SAME
   link on a computer and it runs **in the browser** (nothing to install); a
   [native app](desktop/) exists too, for full keyboard capture.
@@ -27,6 +35,37 @@ Three pieces:
 2. It prints a QR code (and a URL). Scan it with your phone — or open the same
    link on a computer for the [browser desktop remote](#desktop-remote--in-the-browser).
 3. The phone becomes a trackpad + keyboard + media remote — and a **live screen**.
+
+### Multi-touch gestures
+
+The trackpad speaks a laptop trackpad's vocabulary, and the computer decides
+what each gesture means:
+
+| Gesture | What it does |
+| --- | --- |
+| one finger | move the pointer · tap = left click · tap-then-press = drag |
+| two fingers | scroll · tap = right click |
+| two fingers flicked sideways | back / forward |
+| pinch | zoom in / out |
+| three fingers sideways | switch app |
+| three fingers up / down | overview / show the desktop |
+| three-finger tap | middle click |
+
+Multi-finger verbs cross the wire as **intents**, not keystrokes:
+`{t:'gesture', g:'app-next'}`. The agent resolves the intent against its own
+desktop, because only it knows whether it is a Mac — `app-next` is Alt+Tab on
+Linux and Windows and Cmd+Tab on macOS, `overview` is the Super key, Win+Tab or
+Ctrl+↑, `show-desktop` is Super+D or F11. The vocabulary an agent understands is
+listed in its pairing handshake (`gestures`, plus `cap.gesture`); clients talking
+to an agent older than **1.9** send the chord themselves instead, so the swipes
+still work — just resolved by the phone, which has to guess the desktop.
+
+Gestures can be turned off in settings; scrolling and the two-finger right-click
+stay either way, since those are how a trackpad works rather than extras.
+
+On the **Screen** tab the picture itself is zoomable, so the fingers shift up:
+two fingers pinch-zoom and pan the view (in the native app), and three fingers
+scroll the computer.
 
 ### Display brightness
 
@@ -50,6 +89,8 @@ and drive it like a touchscreen:
 
 - **Tap** = left click at that point · **double-tap** = double click ·
   **two-finger tap** = right click · **drag your finger** = move the pointer live.
+- **Scroll** the computer without leaving the view: two fingers in the browser
+  client, three in the native app (where two fingers pinch-zoom the picture).
 - Three quality presets — **Low / Balanced / Sharp** (trade frame rate and
   sharpness for bandwidth); retune live from the bar under the view.
 - **Multi-monitor**: computers with several displays get a monitor picker under
@@ -104,17 +145,11 @@ are wire-compatible: `base64url(iv) + "." + base64url(ciphertext)`.
 ./zlefremote-agent -update -force  # reinstall even if already current
 ```
 
-### Saved devices & the installable phone app (PWA)
+### Saved devices
 
-The phone client at `remote.zlef.fr/r/` is an installable PWA ("Add to home
-screen"). Its home screen lists your **saved computers** — tap one to reconnect
-in a single tap, or "Add a device" to scan/paste a new pairing link.
-
-The manifest deliberately declares **no `orientation`** member: any value —
-including `"any"` — makes Chromium lock the window (`SCREEN_ORIENTATION_FULL_SENSOR`
-on Android for `"any"`), which rotates the installed app even when the phone's
-system rotation lock is ON. Omitting it leaves the lock type at `DEFAULT`, so the
-app follows the device's own orientation setting. Don't re-add it.
+Both the app and the web remote list your **saved computers** — tap one to
+reconnect, or add one by scanning/pasting a new pairing link. The app keeps the
+keys in the Android Keystore; the web client keeps them in `localStorage`.
 
 Reconnect-in-one-tap needs a **stable address**, which is opt-in via
 `--remember`:
@@ -220,7 +255,17 @@ phone UI lives at `/r/<room>`; opening `/r/` on a desktop offers to switch).
   `+F` fullscreen, `+P` quality, `+M` next screen, `+K` raw keys, `+C` push
   clipboard, `+Del` Ctrl+Alt+Del, `+Tab` Alt+Tab, `+S` Super, `+Q` disconnect,
   `+/` the list;
-- clipboard sharing, key hold/release and the latency readout need agent ≥ 1.7.0.
+- **paste what you copied here, over there — text and images**: Ctrl+V while
+  in control first ships this computer's clipboard (taken from the browser's
+  own paste event, so no permission prompt), then sends the Ctrl+V, so the
+  host pastes the new content and never the old one. `Right Ctrl + C` / the
+  toolbar button pushes it without pasting. Pictures travel as PNG in ~27 KB
+  chunks (`{t:'climg'}`, ≤ 12 MB) and the agent answers every one with
+  `{t:'climgack'}`; anything refused (too big, a host with only `xsel`, an
+  older agent) says why in a toast instead of failing silently;
+- clipboard sharing, key hold/release and the latency readout need agent ≥ 1.7.0;
+  images need agent ≥ 1.10.0 with `wl-clipboard` or `xclip` on Linux
+  (`xsel` can't carry images), `osascript` on macOS, PowerShell on Windows.
 
 Browsers reserve a few shortcuts for themselves (Ctrl+W, Ctrl+T, Alt+Tab,
 Escape). In Chrome/Edge, going fullscreen turns on the Keyboard Lock API and

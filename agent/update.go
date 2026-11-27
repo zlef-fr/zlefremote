@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -94,6 +95,35 @@ func checkUpdateNotice(relayHost string) {
 // selfUpdate downloads the latest agent for this OS/arch, verifies its sha256,
 // and atomically swaps the running binary. Returns nil if already current
 // (unless force).
+// updateHost is the relay this agent checks for releases. Set once at startup
+// so a Session — which is handed no flags — can run the same update the CLI's
+// -update flag runs.
+var updateHost string
+
+// remoteUpdate performs the self-update a phone asked for and reports what
+// happened. It never restarts the agent: replacing the binary is safe while it
+// runs (the old image stays mapped), but deciding to drop a live session is the
+// user's call, so the phone is told to restart it instead.
+func remoteUpdate() (newVersion string, err error) {
+	host := updateHost
+	if host == "" {
+		host = "remote.zlef.fr"
+	}
+	r, err := fetchRelease(host)
+	if err != nil {
+		return "", err
+	}
+	if verCmp(version, r.Version) >= 0 {
+		return version, errAlreadyCurrent
+	}
+	if err := selfUpdate(host, false); err != nil {
+		return "", err
+	}
+	return r.Version, nil
+}
+
+var errAlreadyCurrent = errors.New("already up to date")
+
 func selfUpdate(relayHost string, force bool) error {
 	fmt.Printf("  checking %s for updates…\n", relayHost)
 	r, err := fetchRelease(relayHost)

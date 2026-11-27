@@ -98,6 +98,8 @@ const ZRConn = (() => {
 
   return {
     start, send, on, close, markPaired, hasTarget,
+    // bytes queued on the socket but not yet sent (paces bulk sends)
+    buffered: () => (ws ? ws.bufferedAmount : 0),
     getState: () => state, getMode: () => mode,
     getRoom: () => room, getKeyB64: () => keyB64, isPersistent: () => persistent,
   };

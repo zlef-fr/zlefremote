@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZlefRemote</string>
+    <string name="session_channel_name">Remote session</string>
+    <string name="session_channel_description">Keeps the link to your computer alive and shows its playback controls.</string>
+    <string name="session_subtitle">ZlefRemote · end-to-end encrypted</string>
+    <string name="session_connected">Connected — controls this computer</string>
+    <string name="session_connecting">Connecting…</string>
+    <string name="action_previous">Previous</string>
+    <string name="action_play_pause">Play / Pause</string>
+    <string name="action_next">Next</string>
+</resources>

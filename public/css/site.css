@@ -145,6 +145,28 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
 .dl-sep { color: var(--zl-text-faint); padding: 0 2px; }
 .dl-xfce a svg { width: 14px; height: 14px; vertical-align: -2px; }
 
+
+/* ── the phone app ──────────────────────────────────────────────────────── */
+/* Three cards, deliberately not equal: Android ships, iOS doesn't, web is the
+   fallback. The two we can't sell are muted rather than hidden — a missing
+   platform card reads as an oversight, a muted one reads as an answer. */
+.appsec { max-width: 1100px; margin: 0 auto; padding: clamp(36px,7vw,72px) clamp(18px,5vw,64px); }
+.app-grid { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 16px; align-items: stretch; }
+.app-card { display: flex; flex-direction: column; gap: 10px; padding: 22px; background: var(--zl-surface-1); border: 1px solid var(--zl-line); border-radius: var(--zl-radius-lg, 8px); }
+.app-card.muted { background: transparent; }
+.app-card h3 { margin: 0; font-size: 18px; }
+.app-os { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--zl-accent-soft); }
+.app-card.muted .app-os { color: var(--zl-text-muted); }
+.app-os svg { width: 16px; height: 16px; }
+.app-get { align-self: flex-start; margin-top: 4px; }
+.app-get.is-disabled { opacity: .55; cursor: default; }
+.app-meta { margin: 0; font-family: var(--zl-font-mono, ui-monospace, monospace); font-size: 13px; color: var(--zl-text-muted); }
+.app-sub { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--zl-text-soft); }
+
+.openweb { display: inline-block; margin-top: 12px; font-size: 14.5px; font-weight: 600; color: var(--zl-accent-soft); text-decoration: none; }
+.openweb:hover { color: var(--zl-accent-bright); }
+.openweb svg { width: 14px; height: 14px; vertical-align: -2px; }
+
 /* footer */
 .foot { max-width: 1100px; margin: 0 auto; padding: 36px clamp(18px,5vw,64px); display: flex; gap: 14px; justify-content: space-between; color: var(--zl-text-muted); border-top: 1px solid var(--zl-line); font-size: 14px; }
 .foot a { color: var(--zl-accent-soft); }
@@ -159,7 +181,7 @@ section { max-width: 1100px; margin: 0 auto; padding: clamp(40px,7vw,84px) clamp
   .hero-copy { order: 1; }
   .hero-art { order: 2; height: clamp(220px, 56vw, 320px); }
   .lede { max-width: 46ch; }
-  .steps, .feat-grid, .mode-grid, .dl-grid { grid-template-columns: 1fr; }
+  .steps, .feat-grid, .mode-grid, .dl-grid, .app-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Phone ──────────────────────────────────────────────────────────────── */

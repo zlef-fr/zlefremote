@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -121,6 +124,11 @@ type cmd struct {
 	BD     *int     `json:"bd"`    // bright: target display index; nil/-1 = all screens
 	BE     string   `json:"be"`    // brightend: brightness backend id to switch to
 	I      int      `json:"i"`     // ping: echoed back in the pong (round-trip timing)
+	G      string   `json:"g"`     // gesture: semantic multi-touch intent (gestures.go)
+	CI     int      `json:"ci"`    // climg: image id (one per pasted picture)
+	CP     int      `json:"cp"`    // climg: chunk index, 0-based, in order
+	CN     int      `json:"cn"`    // climg: chunk count
+	CD     string   `json:"cd"`    // climg: this chunk of the base64 PNG
 }
 
 // A relayed frame must stay under the relay's 64 KB payload ceiling once the
@@ -150,6 +158,11 @@ type Session struct {
 	brightBusy          bool        // a worker goroutine is applying brightness
 	clipStop            chan struct{}
 	clipLast            string // last clipboard text seen or written (echo guard)
+	// image being received in {t:'climg'} chunks. Only Handle touches these,
+	// and Handle runs on the connection's single read goroutine.
+	imgID, imgNext, imgN int
+	imgBuf               strings.Builder
+	updating             bool // a phone-triggered self-update is running
 }
 
 func NewSession(s *Sealer, inj Injector, scr Screener, br Brightener, clip Clipper, send func(string)) *Session {
@@ -203,7 +216,18 @@ func (se *Session) Handle(frame string) {
 				// clipboard sharing. Older clients ignore them.
 				"keyhold": true,
 				"clip":    se.clip.Available(),
+				// pictures too ({t:'climg'} chunks). Sent even when false, so a
+				// client can tell "this computer has no image-capable clipboard
+				// tool" from "this agent predates images".
+				"clipimg": canWriteImage(se.clip),
+				// this agent accepts {t:'update'} — the phone can update it
+				// instead of sending the user to the computer's keyboard.
+				"update": true,
+				// this agent resolves semantic gestures per-OS ({t:'gesture'}),
+				// so the phone doesn't have to guess Alt+Tab vs Cmd+Tab.
+				"gesture": true,
 			},
+			"gestures": gestureIDs,
 		}
 		for k, v := range se.brightSnapshot() {
 			welcome[k] = v
@@ -245,10 +269,14 @@ func (se *Session) Handle(frame string) {
 		se.inj.KeyToggle(c.K, true)
 	case "kup":
 		se.inj.KeyToggle(c.K, false)
+	case "gesture":
+		se.gesture(c.G)
 	case "text":
 		se.inj.TypeStr(c.S)
 	case "clip":
 		se.setClip(c.S)
+	case "climg":
+		se.clipImageChunk(c.CI, c.CP, c.CN, c.CD)
 	case "clipget":
 		se.pushClip(true)
 	case "clipwatch":
@@ -257,6 +285,8 @@ func (se *Session) Handle(frame string) {
 		} else {
 			se.stopClipWatch()
 		}
+	case "update":
+		se.startUpdate()
 	case "ping":
 		// round-trip probe for the client's latency HUD; echo the id back.
 		se.sealSend(map[string]any{"t": "pong", "i": c.I})
@@ -273,6 +303,53 @@ func (se *Session) Handle(frame string) {
 			se.stopStream()
 		}
 	}
+}
+
+// gesture resolves a semantic multi-touch intent against this computer's OS and
+// injects the chord. Unknown intents are dropped rather than guessed at — a
+// wrong chord on someone's desktop is worse than a gesture that does nothing.
+func (se *Session) gesture(id string) {
+	_, goos := se.inj.HostInfo()
+	a, ok := gestureFor(goos, id)
+	if !ok {
+		return
+	}
+	se.inj.KeyTap(a.Key, a.Mods)
+}
+
+// startUpdate runs the agent's own updater because a phone asked it to.
+//
+// Updating from the controller is the point: the phone is the surface that
+// KNOWS the agent is old — it is the one comparing capabilities and telling the
+// user to update — so making the user walk to the computer and type a command
+// was the wrong shape. Serialized behind updating so a double tap can't run two
+// downloads over the same binary.
+func (se *Session) startUpdate() {
+	se.mu.Lock()
+	if se.updating {
+		se.mu.Unlock()
+		return
+	}
+	se.updating = true
+	se.mu.Unlock()
+
+	se.sealSend(map[string]any{"t": "updating"})
+	go func() {
+		newVersion, err := remoteUpdate()
+		se.mu.Lock()
+		se.updating = false
+		se.mu.Unlock()
+		switch {
+		case errors.Is(err, errAlreadyCurrent):
+			se.sealSend(map[string]any{"t": "updated", "v": version, "current": true})
+		case err != nil:
+			log.Printf("remote update failed: %v", err)
+			se.sealSend(map[string]any{"t": "updateerr", "reason": err.Error()})
+		default:
+			log.Printf("updated to %s on request from a phone — restart to use it", newVersion)
+			se.sealSend(map[string]any{"t": "updated", "v": newVersion})
+		}
+	}()
 }
 
 // moveAbs maps a normalized 0..1 point onto the display currently being
@@ -491,6 +568,71 @@ func (se *Session) pushClip(force bool) {
 		return
 	}
 	se.sealSend(map[string]any{"t": "clip", "s": s})
+}
+
+// Base64 chunk ceiling: the client sends 36 000 characters per chunk, which seals
+// to ~49 KB — under the relay's 64 KB frame. Anything bigger is not ours.
+const clipImageChunkMax = 48 * 1024
+
+// clipImageChunk reassembles a picture copied on the client and, on its last
+// chunk, puts it on the host clipboard. Every outcome is answered with
+// {t:'climgack', ci, ok, err} so the client never has to guess: a paste that
+// silently didn't happen is exactly the failure this protocol exists to avoid.
+//
+// The write runs here, on the read goroutine, on purpose: the client sends
+// Ctrl+V right after the last chunk, and that key must not reach the host before
+// the image is on its clipboard.
+func (se *Session) clipImageChunk(id, part, n int, data string) {
+	fail := func(reason string) {
+		se.imgID, se.imgNext, se.imgN = 0, 0, 0
+		se.imgBuf.Reset()
+		se.sealSend(map[string]any{"t": "climgack", "ci": id, "ok": false, "err": reason})
+	}
+	if !canWriteImage(se.clip) {
+		if part == 0 {
+			fail("unsupported")
+		}
+		return
+	}
+	if part == 0 {
+		se.imgID, se.imgNext, se.imgN = id, 0, n
+		se.imgBuf.Reset()
+	}
+	switch {
+	case id != se.imgID || part != se.imgNext || n != se.imgN:
+		if id == se.imgID {
+			fail("order")
+		}
+		return // stray tail of an image already refused: answered once
+	case n < 1 || len(data) > clipImageChunkMax ||
+		se.imgBuf.Len()+len(data) > base64.StdEncoding.EncodedLen(maxClipImageBytes):
+		fail("toobig")
+		return
+	}
+	se.imgBuf.WriteString(data)
+	se.imgNext++
+	if se.imgNext < se.imgN {
+		return
+	}
+	png, err := base64.StdEncoding.DecodeString(se.imgBuf.String())
+	se.imgID, se.imgNext, se.imgN = 0, 0, 0
+	se.imgBuf.Reset()
+	if err != nil || !bytes.HasPrefix(png, []byte("\x89PNG\r\n\x1a\n")) {
+		se.sealSend(map[string]any{"t": "climgack", "ci": id, "ok": false, "err": "format"})
+		return
+	}
+	if err := se.clip.(ImageClipper).WriteImage(png); err != nil {
+		log.Printf("clipboard image write failed: %v", err)
+		se.sealSend(map[string]any{"t": "climgack", "ci": id, "ok": false, "err": "write"})
+		return
+	}
+	// the host clipboard no longer holds the last text: forget it, so copying
+	// that same text again is seen as the change it is
+	se.mu.Lock()
+	se.clipLast = ""
+	se.mu.Unlock()
+	log.Printf("clipboard: image received (%d KB)", len(png)/1024)
+	se.sealSend(map[string]any{"t": "climgack", "ci": id, "ok": true})
 }
 
 // startClipWatch polls the host clipboard for this client. Idempotent: a second

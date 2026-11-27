@@ -15,3 +15,11 @@ tray/rsrc_windows_*.syso
 
 # the desktop client build (go build ./... drops a binary here)
 desktop/desktop
+
+# Flutter app build output (the APK is published to dist/app by scripts/release.sh)
+app/build/
+app/.dart_tool/
+app/android/key.properties
+app/android/local.properties
+app/android/.gradle/
+app/.flutter-plugins-dependencies

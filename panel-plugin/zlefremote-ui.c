@@ -98,6 +98,7 @@ struct _ZrApp {
   GtkWidget *url_entry;
   GtkWidget *copy_btn;
   GtkWidget *copy_lbl;
+  guint      copy_reset_src;  /* pending "Copied!" → "Copy link", 0 if none */
 
   void     (*status_cb)(ZrStatus, gpointer);
   gpointer   status_user;
@@ -303,8 +304,10 @@ static gboolean on_agent_output(GIOChannel *src, GIOCondition cond, gpointer dat
   }
   if (e) g_clear_error(&e);
 
-  if (cond & (G_IO_HUP | G_IO_ERR))
+  if (cond & (G_IO_HUP | G_IO_ERR)) {
+    app->out_watch = 0;         /* GLib drops the source; don't remove it twice */
     return G_SOURCE_REMOVE;     /* pipe closed; child watch handles cleanup */
+  }
   return G_SOURCE_CONTINUE;
 }
 
@@ -417,6 +420,7 @@ static void on_mode_toggled(GtkToggleButton *b, gpointer data) {
 
 static gboolean reset_copy_label(gpointer data) {
   ZrApp *app = data;
+  app->copy_reset_src = 0;
   gtk_label_set_text(GTK_LABEL(app->copy_lbl), zr_t("copy"));
   return G_SOURCE_REMOVE;
 }
@@ -428,7 +432,8 @@ static void on_copy_clicked(GtkButton *b, gpointer data) {
   GtkClipboard *cb = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
   gtk_clipboard_set_text(cb, app->url, -1);
   gtk_label_set_text(GTK_LABEL(app->copy_lbl), zr_t("copied"));
-  g_timeout_add(1600, reset_copy_label, app);
+  if (app->copy_reset_src) g_source_remove(app->copy_reset_src);
+  app->copy_reset_src = g_timeout_add(1600, reset_copy_label, app);
 }
 
 /* ── widget construction ──────────────────────────────────────────────────*/
@@ -627,6 +632,7 @@ void zr_app_set_status_cb(ZrApp *app, void (*cb)(ZrStatus, gpointer), gpointer u
 
 void zr_app_free(ZrApp *app) {
   if (!app) return;
+  if (app->copy_reset_src) g_source_remove(app->copy_reset_src);
   zr_app_stop(app);
   clear_process(app);
   if (app->peers) g_hash_table_destroy(app->peers);

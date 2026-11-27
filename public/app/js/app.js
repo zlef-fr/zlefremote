@@ -8,6 +8,10 @@
     sensitivity: parseFloat(localStorage.getItem('zr_sens') || '1.6'),
     scrollSpeed: parseFloat(localStorage.getItem('zr_scroll') || '1.0'),
     natural: localStorage.getItem('zr_natural') !== '0',
+    // the multi-finger verbs (three-finger swipes, sideways flick, pinch).
+    // Scrolling and the two-finger right-click are not in here: those are how
+    // a trackpad works, not extras.
+    gestures: localStorage.getItem('zr_gestures') !== '0',
   };
   const getCfg = () => cfg;
 
@@ -39,8 +43,11 @@
   $('lblSens').textContent = t('sensitivity');
   $('lblScroll').textContent = t('scroll_speed');
   $('lblNatural').textContent = t('natural_scroll');
+  $('lblGestures').textContent = t('gestures');
+  $('gesturesNote').textContent = t('gestures_note');
   $('secureNote').textContent = '🔒 ' + t('secure');
   $('sens').value = cfg.sensitivity; $('scrollSp').value = cfg.scrollSpeed; $('natural').checked = cfg.natural;
+  $('gestures').checked = cfg.gestures;
 
   // ── command sender ─────────────────────────────────────────────────────
   const send = (cmd) => { if (paired) ZRConn.send(cmd); };
@@ -51,7 +58,7 @@
   // ── live screen view ─────────────────────────────────────────────────────
   ZRScreen._t = t;
   ZRScreen.config({
-    send, canvas: $('screenCanvas'), hud: $('screenHud'),
+    send, cfg: getCfg, canvas: $('screenCanvas'), hud: $('screenHud'),
     msg: $('screenMsg'), stage: $('screenWrap'),
   });
   let screenHintShown = false;
@@ -147,6 +154,9 @@
       hideOverlay();
       setStatus(t('paired'), 'ok');
       $('hostName').textContent = c.name || '';
+      // agent 1.9+ resolves gesture intents against its own desktop; older ones
+      // get the chord from here instead, picked for the OS it just reported
+      ZRGestures.setHost(c.os, !!(c.cap && c.cap.gesture));
       vibrate(20);
       ZRMedia.start(c.name || '');
       // reveal the Screen tab only if this computer's agent can capture it;
@@ -358,16 +368,47 @@
       typer.value = ''; // keep the field from drifting out of sync
     }
   });
-  // hardware keyboards (desktop test): send arrows etc.
-  typer.addEventListener('keydown', (e) => {
-    const map = { Enter: 'enter', Backspace: 'backspace', Tab: 'tab', Escape: 'escape',
-      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Delete: 'delete' };
-    if (map[e.key]) {
-      e.preventDefault(); pressKey(map[e.key]);
-      if (e.key === 'Enter') { echoChar('↵', 'ctl'); echoFlush(); }
-      else if (e.key === 'Backspace') echoChar('⌫', 'del');
+  // ── a computer's keyboard (this page opened on a laptop) ────────────────────
+  // A physical keyboard drives the other computer from anywhere on the page,
+  // not only from the typer: chords (Ctrl+C, Ctrl+Shift+T, Win+E), Escape,
+  // Tab, F-keys, and the Windows key pressed alone. Printable keys typed into
+  // the typer stay with it (its input event composes and echoes them).
+  // Touch keyboards report 'Unidentified' here and keep using beforeinput.
+  let hwSolo = null;   // the modifier pressed with nothing else, if any
+  function hwEditable(t) {
+    return t !== typer && !!(t && t.closest && t.closest('input, textarea, select, [contenteditable]'));
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!document.body.classList.contains('mode-control') || e.isComposing || hwEditable(e.target)) return;
+    if (ZRKeys.isModifier(e.key)) {
+      if (!e.repeat) hwSolo = ZRKeys.modCount(e) === 1 ? e.code : false;
+      return;
     }
-  });
+    hwSolo = false;
+    if (e.key === 'Dead' || e.key === 'Unidentified') return;
+    const inTyper = e.target === typer;
+    if (ZRKeys.isPrintable(e)) {
+      if (inTyper) return;
+      e.preventDefault();
+      send({ t: 'text', s: e.key }); echoChar(e.key);
+      return;
+    }
+    const chorded = e.ctrlKey || e.altKey || e.metaKey;
+    const k = chorded ? ZRKeys.chord(e) : ZRKeys.named(e);
+    if (!k) return;
+    e.preventDefault();
+    send({ t: 'key', k, mods: ZRKeys.mods(e) });
+    if (k === 'enter') { echoChar('↵', 'ctl'); echoFlush(); }
+    else if (k === 'backspace') echoChar('⌫', 'del');
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (!document.body.classList.contains('mode-control')) return;
+    if (hwSolo === e.code && (e.code === 'MetaLeft' || e.code === 'MetaRight')) {
+      e.preventDefault();
+      send({ t: 'key', k: 'meta', mods: [] });
+    }
+    if (ZRKeys.isModifier(e.key)) hwSolo = null;
+  }, true);
 
   // ── media (remote layout: volume row · transport row w/ big play) ──────────
   const MEDIA = [
@@ -484,6 +525,7 @@
   $('sens').addEventListener('input', (e) => { cfg.sensitivity = parseFloat(e.target.value); localStorage.setItem('zr_sens', e.target.value); });
   $('scrollSp').addEventListener('input', (e) => { cfg.scrollSpeed = parseFloat(e.target.value); localStorage.setItem('zr_scroll', e.target.value); });
   $('natural').addEventListener('change', (e) => { cfg.natural = e.target.checked; localStorage.setItem('zr_natural', e.target.checked ? '1' : '0'); });
+  $('gestures').addEventListener('change', (e) => { cfg.gestures = e.target.checked; localStorage.setItem('zr_gestures', e.target.checked ? '1' : '0'); });
 
   // lock-screen controls toggle — only shown where the browser supports it
   if (ZRMedia.supported()) {

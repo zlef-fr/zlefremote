@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZlefRemote</string>
+    <string name="session_channel_name">Session à distance</string>
+    <string name="session_channel_description">Maintient le lien avec votre ordinateur et affiche ses contrôles de lecture.</string>
+    <string name="session_subtitle">ZlefRemote · chiffré de bout en bout</string>
+    <string name="session_connected">Connecté — pilote cet ordinateur</string>
+    <string name="session_connecting">Connexion…</string>
+    <string name="action_previous">Précédent</string>
+    <string name="action_play_pause">Lecture / Pause</string>
+    <string name="action_next">Suivant</string>
+</resources>
