@@ -255,7 +255,17 @@ phone UI lives at `/r/<room>`; opening `/r/` on a desktop offers to switch).
   `+F` fullscreen, `+P` quality, `+M` next screen, `+K` raw keys, `+C` push
   clipboard, `+Del` Ctrl+Alt+Del, `+Tab` Alt+Tab, `+S` Super, `+Q` disconnect,
   `+/` the list;
-- clipboard sharing, key hold/release and the latency readout need agent ≥ 1.7.0.
+- **paste what you copied here, over there — text and images**: Ctrl+V while
+  in control first ships this computer's clipboard (taken from the browser's
+  own paste event, so no permission prompt), then sends the Ctrl+V, so the
+  host pastes the new content and never the old one. `Right Ctrl + C` / the
+  toolbar button pushes it without pasting. Pictures travel as PNG in ~27 KB
+  chunks (`{t:'climg'}`, ≤ 12 MB) and the agent answers every one with
+  `{t:'climgack'}`; anything refused (too big, a host with only `xsel`, an
+  older agent) says why in a toast instead of failing silently;
+- clipboard sharing, key hold/release and the latency readout need agent ≥ 1.7.0;
+  images need agent ≥ 1.10.0 with `wl-clipboard` or `xclip` on Linux
+  (`xsel` can't carry images), `osascript` on macOS, PowerShell on Windows.
 
 Browsers reserve a few shortcuts for themselves (Ctrl+W, Ctrl+T, Alt+Tab,
 Escape). In Chrome/Edge, going fullscreen turns on the Keyboard Lock API and

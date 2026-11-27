@@ -57,9 +57,10 @@ func newClipper() Clipper {
 		// missing from the agent's environment.
 		log.Printf("[clip] wl-clipboard backend (WAYLAND_DISPLAY=%s)", display)
 		return execClipper{
-			readCmd:  []string{"wl-paste", "--no-newline"},
+			readCmd:  []string{"wl-paste", "--no-newline", "--type", "text"},
 			writeCmd: []string{"wl-copy"},
 			env:      []string{"WAYLAND_DISPLAY=" + display},
+			image:    pngOnStdin("wl-copy", "--type", "image/png"),
 		}
 	}
 	if have("xclip") {
@@ -67,6 +68,7 @@ func newClipper() Clipper {
 		return execClipper{
 			readCmd:  []string{"xclip", "-selection", "clipboard", "-o"},
 			writeCmd: []string{"xclip", "-selection", "clipboard", "-i"},
+			image:    pngOnStdin("xclip", "-selection", "clipboard", "-t", "image/png", "-i"),
 		}
 	}
 	if have("xsel") {
@@ -79,8 +81,9 @@ func newClipper() Clipper {
 	if have("wl-copy") && have("wl-paste") {
 		log.Println("[clip] wl-clipboard backend (no session detected)")
 		return execClipper{
-			readCmd:  []string{"wl-paste", "--no-newline"},
+			readCmd:  []string{"wl-paste", "--no-newline", "--type", "text"},
 			writeCmd: []string{"wl-copy"},
+			image:    pngOnStdin("wl-copy", "--type", "image/png"),
 		}
 	}
 	return noClipper{}

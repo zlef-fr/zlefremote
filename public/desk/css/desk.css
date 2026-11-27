@@ -133,6 +133,10 @@ body.driving #screen { cursor: none; }
 .toast.out { animation: toastOut .3s ease both; }
 .toast.warn { border-color: rgba(199,154,62,.45); color: var(--zl-warning, #c79a3e); }
 .toast.bad { border-color: rgba(194,86,106,.45); color: var(--zl-danger, #c2566a); }
+.toast.progress { display: flex; flex-direction: column; gap: 7px; min-width: 200px; }
+.toast.progress i { display: block; height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; }
+.toast.progress b { display: block; height: 100%; background: var(--zl-accent-soft, #9dae50); transform: scaleX(0); transform-origin: left; transition: transform .18s ease; }
+.toast.progress.settled i { opacity: 0; transition: opacity .3s ease; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes toastOut { to { opacity: 0; transform: translateY(-6px); } }
 

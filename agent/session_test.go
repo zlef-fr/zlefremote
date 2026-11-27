@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -143,10 +146,25 @@ func (f *fakeBright) setCalls() [][2]int {
 
 // fakeClip is an in-memory host clipboard.
 type fakeClip struct {
-	mu     sync.Mutex
-	avail  bool
-	text   string
-	writes []string
+	mu      sync.Mutex
+	avail   bool
+	text    string
+	writes  []string
+	noImage bool // a text-only backend (xsel, pbcopy without osascript)
+	images  [][]byte
+}
+
+func (f *fakeClip) ImageAvailable() bool { return !f.noImage }
+func (f *fakeClip) WriteImage(png []byte) error {
+	f.mu.Lock()
+	f.images = append(f.images, append([]byte(nil), png...))
+	f.mu.Unlock()
+	return nil
+}
+func (f *fakeClip) imagesWritten() [][]byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][]byte(nil), f.images...)
 }
 
 func (f *fakeClip) Available() bool { return f.avail }
@@ -604,6 +622,108 @@ func TestClipboardWatchPushesHostChangesOnce(t *testing.T) {
 		t.Fatalf("clip pushes: got %d, want 2 (no duplicates, no echo)", n)
 	}
 	h.se.Close()
+}
+
+// testPNG is a PNG signature followed by enough filler to need several chunks.
+func testPNG(size int) []byte {
+	b := make([]byte, size)
+	copy(b, "\x89PNG\r\n\x1a\n")
+	for i := 8; i < size; i++ {
+		b[i] = byte(i * 31)
+	}
+	return b
+}
+
+// sendImage chunks a picture the way the browser does (public/desk/js/app.js).
+func (h *harness) sendImage(t *testing.T, id int, png []byte) {
+	t.Helper()
+	const chunk = 36000
+	b64 := base64.StdEncoding.EncodeToString(png)
+	n := (len(b64) + chunk - 1) / chunk
+	for i := 0; i < n; i++ {
+		hi := (i + 1) * chunk
+		if hi > len(b64) {
+			hi = len(b64)
+		}
+		h.sendCmd(t, map[string]any{"t": "climg", "ci": id, "cp": i, "cn": n, "cd": b64[i*chunk : hi]})
+	}
+}
+
+func TestClipboardImageFromClient(t *testing.T) {
+	h := newHarness(t)
+	h.sendCmd(t, map[string]any{"t": "hello"})
+	if cap := h.frames("welcome")[0]["cap"].(map[string]any); cap["clipimg"] != true {
+		t.Fatalf("welcome cap.clipimg: got %#v, want true", cap["clipimg"])
+	}
+	png := testPNG(200 * 1024) // ~7 chunks
+	h.sendImage(t, 1, png)
+	imgs := h.clip.imagesWritten()
+	if len(imgs) != 1 || !bytes.Equal(imgs[0], png) {
+		t.Fatalf("host clipboard image: got %d images (first %d bytes), want the %d-byte original", len(imgs), func() int {
+			if len(imgs) > 0 {
+				return len(imgs[0])
+			}
+			return 0
+		}(), len(png))
+	}
+	acks := h.frames("climgack")
+	if len(acks) != 1 || acks[0]["ok"] != true || acks[0]["ci"].(float64) != 1 {
+		t.Fatalf("ack: got %#v, want one ok for image 1", acks)
+	}
+}
+
+func TestClipboardImageRefusalsAreAnswered(t *testing.T) {
+	// every refusal answers exactly once: the client must never be left waiting
+	h := newHarness(t)
+
+	h.sendImage(t, 1, []byte("GIF89a not a png at all"))
+	h.sendCmd(t, map[string]any{"t": "climg", "ci": 2, "cp": 0, "cn": 3, "cd": "iVBO"})
+	h.sendCmd(t, map[string]any{"t": "climg", "ci": 2, "cp": 2, "cn": 3, "cd": "AAAA"}) // skipped 1
+	h.sendCmd(t, map[string]any{"t": "climg", "ci": 2, "cp": 1, "cn": 3, "cd": "AAAA"}) // stray tail
+
+	acks := h.frames("climgack")
+	want := []string{"format", "order"}
+	if len(acks) != len(want) {
+		t.Fatalf("acks: got %#v, want %v", acks, want)
+	}
+	for i, w := range want {
+		if acks[i]["ok"] != false || acks[i]["err"] != w {
+			t.Fatalf("ack %d: got %#v, want err %q", i, acks[i], w)
+		}
+	}
+	if n := len(h.clip.imagesWritten()); n != 0 {
+		t.Fatalf("refused images were written (%d)", n)
+	}
+
+	// a backend that can't carry pictures says so, in the welcome and per image
+	h2 := newHarness(t)
+	h2.clip.noImage = true
+	h2.sendCmd(t, map[string]any{"t": "hello"})
+	if cap := h2.frames("welcome")[0]["cap"].(map[string]any); cap["clipimg"] != false {
+		t.Fatalf("welcome cap.clipimg: got %#v, want false", cap["clipimg"])
+	}
+	h2.sendImage(t, 7, testPNG(100*1024))
+	if acks := h2.frames("climgack"); len(acks) != 1 || acks[0]["err"] != "unsupported" {
+		t.Fatalf("unsupported ack: got %#v", acks)
+	}
+}
+
+func TestClipboardImageChunkFitsTheRelayFrame(t *testing.T) {
+	// the browser's chunk size must seal under the relay's 64 KB ceiling, wrapped
+	// in the {t:'data',payload} envelope the relay actually measures
+	h := newHarness(t)
+	b, _ := json.Marshal(map[string]any{"t": "climg", "ci": 999999, "cp": 999, "cn": 999, "cd": strings.Repeat("A", 36000)})
+	sealed, err := h.sealer.Seal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := json.Marshal(map[string]any{"t": "data", "payload": sealed})
+	if len(env) > 64*1024 {
+		t.Fatalf("one image chunk is %d bytes on the wire, over the 64 KB relay frame", len(env))
+	}
+	if 36000 > clipImageChunkMax {
+		t.Fatalf("agent refuses the browser's chunk size")
+	}
 }
 
 func TestPingAnswersWithPong(t *testing.T) {

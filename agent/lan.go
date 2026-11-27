@@ -121,6 +121,10 @@ func runLAN(sealer *Sealer, inj Injector, scr Screener, br Brightener, clip Clip
 			return
 		}
 		defer c.CloseNow()
+		// same ceiling as the relay socket: the library's 32 KB default is
+		// below one clipboard-image chunk (~49 KB sealed), and a frame over the
+		// limit doesn't fail alone, it closes the whole connection.
+		c.SetReadLimit(128 * 1024)
 		idMu.Lock()
 		nextID++
 		id := nextID

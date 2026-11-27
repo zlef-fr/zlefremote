@@ -46,8 +46,21 @@ const ZRDeskI18n = (() => {
     raw_off: 'layout-safe typing on',
     clip_in: 'clipboard received',
     clip_out: 'clipboard sent',
-    clip_manual: 'clipboard: press Right Ctrl + C to send yours',
-    clip_denied: 'clipboard permission refused — Right Ctrl + C still sends yours',
+    clip_manual: 'clipboard: Ctrl+V while in control brings yours along, text and images',
+    clip_denied: 'clipboard permission refused. Ctrl+V while in control still sends yours',
+    clip_empty: 'your clipboard is empty',
+    clip_notimage: 'only text and images can be sent, not files',
+    clip_toolong: 'text too long to send (16 KB max)',
+    clip_img_old: 'images need a newer agent on the other computer (1.10 or later)',
+    clip_img_host: 'the other computer has no clipboard tool that takes images (on Linux: install xclip or wl-clipboard)',
+    clip_img_bad: 'this image could not be read',
+    clip_img_big: 'image too large to send ({mb} MB max)',
+    clip_img_sending: 'sending image…',
+    clip_img_out: 'image sent ({size})',
+    clip_img_err_toobig: 'image too large for the other computer',
+    clip_img_err_lost: 'image lost on the way, try again',
+    clip_img_err_format: 'the other computer refused this image',
+    clip_img_err_write: 'the other computer could not put the image on its clipboard',
     q_fast: 'fast', q_balanced: 'balanced', q_sharp: 'sharp',
     ok: 'OK',
   };
@@ -96,8 +109,21 @@ const ZRDeskI18n = (() => {
     raw_off: 'frappe sans souci de disposition',
     clip_in: 'presse-papiers reçu',
     clip_out: 'presse-papiers envoyé',
-    clip_manual: 'presse-papiers : Ctrl droite + C pour envoyer le vôtre',
-    clip_denied: 'permission presse-papiers refusée — Ctrl droite + C envoie quand même le vôtre',
+    clip_manual: 'presse-papiers : Ctrl+V en contrôle emporte le vôtre, texte et images',
+    clip_denied: 'permission presse-papiers refusée. Ctrl+V en contrôle envoie quand même le vôtre',
+    clip_empty: 'votre presse-papiers est vide',
+    clip_notimage: 'seuls le texte et les images s’envoient, pas les fichiers',
+    clip_toolong: 'texte trop long pour être envoyé (16 Ko max)',
+    clip_img_old: 'les images demandent un agent plus récent sur l’autre ordinateur (1.10 ou plus)',
+    clip_img_host: 'l’autre ordinateur n’a aucun outil de presse-papiers qui accepte les images (sous Linux : installer xclip ou wl-clipboard)',
+    clip_img_bad: 'impossible de lire cette image',
+    clip_img_big: 'image trop lourde pour être envoyée ({mb} Mo max)',
+    clip_img_sending: 'envoi de l’image…',
+    clip_img_out: 'image envoyée ({size})',
+    clip_img_err_toobig: 'image trop lourde pour l’autre ordinateur',
+    clip_img_err_lost: 'image perdue en route, réessayez',
+    clip_img_err_format: 'l’autre ordinateur a refusé cette image',
+    clip_img_err_write: 'l’autre ordinateur n’a pas pu mettre l’image dans son presse-papiers',
     q_fast: 'rapide', q_balanced: 'équilibré', q_sharp: 'net',
     ok: 'OK',
   };
@@ -111,5 +137,11 @@ const ZRDeskI18n = (() => {
   const lang = pick();
   const dict = lang === 'fr' ? FR : EN;
   document.documentElement.lang = lang;
-  return { lang, t: (k) => (k in dict ? dict[k] : (EN[k] || k)) };
+  // t('key', {name: value}) fills {name} placeholders
+  function t(k, vars) {
+    let s = k in dict ? dict[k] : (EN[k] || k);
+    if (vars) for (const v in vars) s = s.split('{' + v + '}').join(vars[v]);
+    return s;
+  }
+  return { lang, t };
 })();

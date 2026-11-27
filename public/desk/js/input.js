@@ -20,7 +20,7 @@
 // state in which the Keyboard Lock API works — and without it the browser and
 // the OS keep Escape, the Windows key, Alt+Tab and Ctrl+W for themselves.
 const ZRDeskInput = (() => {
-  let stage = null, send = () => {}, view = null, onAction = () => {};
+  let stage = null, send = () => {}, view = null, onAction = () => {}, onPaste = null;
   let driving = false, keyHold = false, raw = false;
   let nx = .5, ny = .5, pendingMove = false, rafId = 0;
   let scrollAcc = 0, scrollAccX = 0;
@@ -43,6 +43,7 @@ const ZRDeskInput = (() => {
     send = opts.send || send;
     view = opts.view;
     onAction = opts.onAction || onAction;
+    onPaste = opts.onPaste || null;
 
     stage.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
@@ -217,6 +218,7 @@ const ZRDeskInput = (() => {
     // Ctrl+Esc: give control back, from anywhere
     if (e.key === 'Escape' && e.ctrlKey) { e.preventDefault(); escape(); return; }
     if (!driving) return;
+    if (pasteChord(e)) return;
     e.preventDefault();
 
     if (e.repeat && !raw && ZRKeys.isPrintable(e)) { queueText(e.key); return; }
@@ -248,6 +250,26 @@ const ZRDeskInput = (() => {
     } else {
       send({ t: 'key', k: name, mods: ZRKeys.mods(e) });   // agent < 1.7.0
     }
+  }
+
+  // Ctrl+V / Cmd+V / Ctrl+Shift+V / Shift+Insert: paste what was copied HERE.
+  // The keydown is deliberately NOT prevented, so the browser runs its own
+  // paste and fires a 'paste' event carrying the clipboard (text or picture)
+  // without any permission prompt. The app ships it to the host, and only then
+  // does the shortcut go over as one tap: pressed after the content landed,
+  // the host pastes the new clipboard, not the old one. The matching keyup
+  // finds nothing in heldKeys and is ignored, which is what a tap needs.
+  function pasteChord(e) {
+    if (!onPaste || raw || e.repeat) return false;
+    const v = e.code === 'KeyV' && (e.ctrlKey || e.metaKey) && !e.altKey;
+    const ins = e.code === 'Insert' && e.shiftKey && !e.ctrlKey && !e.altKey;
+    if (!v && !ins) return false;
+    const name = ZRKeys.chord(e);
+    if (!name) return false;
+    flushText();
+    const tap = { t: 'key', k: name, mods: ZRKeys.mods(e) };
+    onPaste().catch(() => {}).finally(() => { if (driving) send(tap); });
+    return true;
   }
 
   function onKeyUp(e) {
